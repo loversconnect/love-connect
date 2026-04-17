@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:provider/provider.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({Key? key}) : super(key: key);
@@ -9,7 +11,7 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final TextEditingController _nameController = TextEditingController(text: 'John Doe');
+  late final TextEditingController _nameController;
   final TextEditingController _bioController = TextEditingController(
     text: 'Love music and dancing. Looking for meaningful connections.',
   );
@@ -34,6 +36,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final int _maxBioLength = 500;
 
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final profile = context.read<ProfileProvider>().currentProfile;
+    _nameController = TextEditingController(text: profile?.name ?? '');
+    _bioController.text = profile?.bio ?? _bioController.text;
+    _selectedInterests
+      ..clear()
+      ..addAll(profile?.interests ?? _selectedInterests);
+  }
 
   void _toggleInterest(String interest) {
     setState(() {
@@ -69,8 +82,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _isSaving = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(milliseconds: 800));
+    await context.read<ProfileProvider>().updateProfile(
+          bio: _bioController.text.trim(),
+          interests: _selectedInterests,
+        );
 
     if (!mounted) return;
     setState(() {

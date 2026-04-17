@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Tabs/Discover%20tab.dart';
 import 'package:lerolove/Screens/Tabs/Matches%20tab.dart';
 import 'package:lerolove/Screens/Tabs/Settings%20tab.dart';
+import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:provider/provider.dart';
 
 class MainAppScreen extends StatefulWidget {
   const MainAppScreen({Key? key}) : super(key: key);
@@ -25,6 +27,7 @@ class _MainAppScreenState extends State<MainAppScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final unreadBadge = context.watch<MatchesProvider>().unreadCountTotal();
 
     return Scaffold(
       body: IndexedStack(
@@ -59,7 +62,7 @@ class _MainAppScreenState extends State<MainAppScreen> {
                   icon: Icons.chat_bubble,
                   label: 'Matches',
                   index: 1,
-                  badge: 3, // This can be dynamic based on unread messages
+                  badge: unreadBadge,
                   isDark: isDark,
                   colorScheme: colorScheme,
                 ),

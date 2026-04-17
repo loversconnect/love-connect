@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Chat%20detail%20screen.dart';
+import 'package:lerolove/models/match_models.dart';
+import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:provider/provider.dart';
 
 class MatchesTab extends StatefulWidget {
   const MatchesTab({Key? key}) : super(key: key);
@@ -10,42 +14,6 @@ class MatchesTab extends StatefulWidget {
 }
 
 class _MatchesTabState extends State<MatchesTab> {
-  // Demo matches data
-  final List<Map<String, dynamic>> _matches = [
-    {
-      'name': 'Thandiwe',
-      'id': '1',
-      'lastMessage': 'I\'m good too! Would love to know more about you 😊',
-      'timestamp': '1 min ago',
-      'unread': 1,
-      'isOnline': true,
-    },
-    {
-      'name': 'Chisomo',
-      'id': '2',
-      'lastMessage': 'Would love to grab coffee ☕',
-      'timestamp': '1 hour ago',
-      'unread': 0,
-      'isOnline': false,
-    },
-    {
-      'name': 'Mphatso',
-      'id': '3',
-      'lastMessage': 'That sounds amazing!',
-      'timestamp': '3 hours ago',
-      'unread': 0,
-      'isOnline': true,
-    },
-    {
-      'name': 'Kondwani',
-      'id': '4',
-      'lastMessage': 'See you then! 😊',
-      'timestamp': 'Yesterday',
-      'unread': 0,
-      'isOnline': false,
-    },
-  ];
-
   String _searchQuery = '';
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
@@ -56,18 +24,11 @@ class _MatchesTabState extends State<MatchesTab> {
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get _filteredMatches {
-    if (_searchQuery.isEmpty) {
-      return _matches;
-    }
-    return _matches
-        .where((match) =>
-        match['name'].toLowerCase().contains(_searchQuery.toLowerCase()))
-        .toList();
-  }
-
   void _showUnmatchConfirmation(
-      BuildContext context, String matchId, String matchName) {
+    BuildContext context,
+    MatchThread match,
+    String name,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
@@ -75,11 +36,11 @@ class _MatchesTabState extends State<MatchesTab> {
         return AlertDialog(
           backgroundColor: colorScheme.surface,
           title: Text(
-            'Unmatch with $matchName?',
+            'Unmatch with $name?',
             style: TextStyle(color: colorScheme.onSurface),
           ),
           content: Text(
-            'This action cannot be undone. Your conversation will be deleted.',
+            'This action cannot be undone. Your conversation will be hidden.',
             style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
           ),
           shape: RoundedRectangleBorder(
@@ -94,21 +55,18 @@ class _MatchesTabState extends State<MatchesTab> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _matches.removeWhere((item) => item['id'] == matchId);
-                });
+              onPressed: () async {
+                await context.read<MatchesProvider>().unmatch(match.id);
+                if (!context.mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Unmatched with $matchName'),
+                    content: Text('Unmatched with $name'),
                     duration: const Duration(seconds: 2),
                   ),
                 );
               },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Unmatch'),
             ),
           ],
@@ -119,29 +77,44 @@ class _MatchesTabState extends State<MatchesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredMatches = _filteredMatches;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
+    final auth = context.watch<AuthProvider>();
+    final matchesProvider = context.watch<MatchesProvider>();
+    final uid = auth.backendUserId ?? auth.uid;
+
+    final matches = uid == null
+        ? const <MatchThread>[]
+        : matchesProvider.matches
+              .where((match) {
+                if (_searchQuery.isEmpty) return true;
+                final otherId = _otherUserId(match, uid);
+                return otherId.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                );
+              })
+              .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
         title: _isSearching
             ? TextField(
-          controller: _searchController,
-          autofocus: true,
-          style: TextStyle(color: colorScheme.onSurface),
-          decoration: InputDecoration(
-            hintText: 'Search matches...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.6)),
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-        )
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(color: colorScheme.onSurface),
+                decoration: InputDecoration(
+                  hintText: 'Search matches...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              )
             : const Text('Matches'),
         actions: [
           IconButton(
@@ -160,62 +133,66 @@ class _MatchesTabState extends State<MatchesTab> {
           ),
         ],
       ),
-      body: _matches.isEmpty
+      body: uid == null
+          ? _buildSignedOutState()
+          : matchesProvider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : matchesProvider.matches.isEmpty
           ? _buildEmptyState()
-          : filteredMatches.isEmpty
+          : matches.isEmpty
           ? _buildNoResultsState()
           : Column(
-        children: [
-          // Match count header
-          if (!_isSearching)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-              color: colorScheme.surface,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: Responsive.icon(context, 18),
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_matches.length} ${_matches.length == 1 ? 'Match' : 'Matches'}',
-                    style: TextStyle(
-                      fontSize: Responsive.font(context, 14),
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface.withOpacity(0.7),
+              children: [
+                if (!_isSearching)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    color: colorScheme.surface,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: Responsive.icon(context, 18),
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${matchesProvider.matches.length} ${matchesProvider.matches.length == 1 ? 'Match' : 'Matches'}',
+                          style: TextStyle(
+                            fontSize: Responsive.font(context, 14),
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: matches.length,
+                    itemBuilder: (context, index) {
+                      final match = matches[index];
+                      final otherId = _otherUserId(match, uid);
+                      return _buildMatchTile(match, otherId, isDark);
+                    },
+                  ),
+                ),
+              ],
             ),
-          // Matches list
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredMatches.length,
-              itemBuilder: (context, index) {
-                final match = filteredMatches[index];
-                return _buildMatchTile(match, index);
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildMatchTile(Map<String, dynamic> match, int index) {
-    final hasUnread = (match['unread'] ?? 0) > 0;
-    final isOnline = match['isOnline'] ?? false;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildMatchTile(MatchThread match, String otherUserId, bool isDark) {
     final colorScheme = Theme.of(context).colorScheme;
+    final uid = context.read<AuthProvider>().uid!;
+    final hasUnread = match.unreadFor(uid) > 0;
+
+    final name = match.peerName ?? otherUserId;
 
     return Dismissible(
-      key: Key(match['id']),
+      key: Key(match.id),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -229,7 +206,7 @@ class _MatchesTabState extends State<MatchesTab> {
               color: Colors.white,
               size: Responsive.icon(context, 28),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               'Unmatch',
               style: TextStyle(
@@ -242,45 +219,45 @@ class _MatchesTabState extends State<MatchesTab> {
         ),
       ),
       confirmDismiss: (direction) async {
-        _showUnmatchConfirmation(context, match['id'], match['name']);
+        _showUnmatchConfirmation(context, match, name);
         return false;
       },
       child: InkWell(
         onTap: () async {
+          await context.read<MatchesProvider>().markAsRead(match.id);
+          if (!mounted) return;
           await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ChatDetailScreen(
-                matchName: match['name'],
-                matchId: match['id'],
+                matchName: name,
+                matchId: match.id,
+                peerUserId: otherUserId,
               ),
             ),
           );
-
-          if (hasUnread) {
-            setState(() {
-              match['unread'] = 0;
-            });
-          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                  color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 1),
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+                width: 1,
+              ),
             ),
           ),
           child: Row(
             children: [
-              // Profile Photo with Online Indicator
               Stack(
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: isDark ? Colors.grey[700] : Colors.grey[300],
+                    backgroundColor: isDark
+                        ? Colors.grey[700]
+                        : Colors.grey[300],
                     child: Text(
-                      match['name'][0],
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
                       style: TextStyle(
                         fontSize: Responsive.font(context, 20),
                         fontWeight: FontWeight.bold,
@@ -288,28 +265,9 @@ class _MatchesTabState extends State<MatchesTab> {
                       ),
                     ),
                   ),
-                  if (isOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: isDark
-                                  ? const Color(0xFF121212)
-                                  : Colors.white,
-                              width: 2),
-                        ),
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(width: 12),
-              // Message Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,23 +276,27 @@ class _MatchesTabState extends State<MatchesTab> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          match['name'],
+                          name,
                           style: TextStyle(
                             fontSize: Responsive.font(context, 16),
-                            fontWeight:
-                            hasUnread ? FontWeight.bold : FontWeight.w600,
+                            fontWeight: hasUnread
+                                ? FontWeight.bold
+                                : FontWeight.w600,
                             color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
                         Text(
-                          match['timestamp'],
+                          _formatTime(match.lastMessageAt),
                           style: TextStyle(
                             fontSize: Responsive.font(context, 13),
                             color: hasUnread
                                 ? colorScheme.primary
-                                : (isDark ? Colors.grey[500] : Colors.grey[600]),
-                            fontWeight:
-                            hasUnread ? FontWeight.w600 : FontWeight.normal,
+                                : (isDark
+                                      ? Colors.grey[500]
+                                      : Colors.grey[600]),
+                            fontWeight: hasUnread
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                           ),
                         ),
                       ],
@@ -344,14 +306,18 @@ class _MatchesTabState extends State<MatchesTab> {
                       children: [
                         Expanded(
                           child: Text(
-                            match['lastMessage'],
+                            match.lastMessage.isEmpty
+                                ? 'Say hello!'
+                                : match.lastMessage,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: Responsive.font(context, 14),
                               color: hasUnread
                                   ? (isDark ? Colors.white : Colors.black87)
-                                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  : (isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600]),
                               fontWeight: hasUnread
                                   ? FontWeight.w500
                                   : FontWeight.normal,
@@ -374,7 +340,7 @@ class _MatchesTabState extends State<MatchesTab> {
                               minHeight: 20,
                             ),
                             child: Text(
-                              match['unread'].toString(),
+                              match.unreadFor(uid).toString(),
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: Responsive.font(context, 11),
@@ -392,6 +358,38 @@ class _MatchesTabState extends State<MatchesTab> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String _otherUserId(MatchThread match, String myUid) {
+    for (final id in match.userIds) {
+      if (id != myUid) return id;
+    }
+    return match.userIds.isNotEmpty ? match.userIds.first : '';
+  }
+
+  String _formatTime(DateTime? timestamp) {
+    if (timestamp == null) return '';
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) {
+      return 'Now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else {
+      return '${timestamp.day}/${timestamp.month}';
+    }
+  }
+
+  Widget _buildSignedOutState() {
+    return Center(
+      child: Text(
+        'Sign in to view matches',
+        style: TextStyle(fontSize: Responsive.font(context, 16)),
       ),
     );
   }
@@ -424,18 +422,6 @@ class _MatchesTabState extends State<MatchesTab> {
               color: isDark ? Colors.grey[600] : Colors.grey[500],
             ),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.explore),
-            label: const Text('Start Discovering'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -461,17 +447,8 @@ class _MatchesTabState extends State<MatchesTab> {
               color: isDark ? Colors.grey[400] : Colors.grey[700],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Try a different search term',
-            style: TextStyle(
-              fontSize: Responsive.font(context, 15),
-              color: isDark ? Colors.grey[600] : Colors.grey[500],
-            ),
-          ),
         ],
       ),
     );
   }
 }
-

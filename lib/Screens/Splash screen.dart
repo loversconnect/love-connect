@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
+import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
 
@@ -34,12 +39,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // Navigate after 2 seconds
+    // Navigate after splash
     Timer(const Duration(seconds: 2), () {
       if (mounted) {
+        final auth = context.read<AuthProvider>();
+        final profile = context.read<ProfileProvider>();
+        final Widget nextScreen;
+        if (!auth.isAuthenticated) {
+          nextScreen = const WelcomeScreen();
+        } else if (profile.hasCompletedProfile) {
+          nextScreen = const MainAppScreen();
+        } else {
+          nextScreen = const ProfileBasicsScreen();
+        }
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+          MaterialPageRoute(builder: (context) => nextScreen),
         );
       }
     });

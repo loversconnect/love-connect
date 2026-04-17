@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/theme_manager.dart';
 import 'package:lerolove/Screens/Theme%20settings%20screen.dart';
+import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/Utils/app_state.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
+import 'package:lerolove/services/backend_api.dart';
 import '../Edit profile screen.dart';
 import '../Manage photos screen.dart';
 import '../Discovery settings screen.dart';
@@ -17,32 +20,42 @@ class SettingsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
+    final profile = context.watch<ProfileProvider>().currentProfile;
+    final appState = context.watch<AppState>();
+    final displayName = profile?.name ?? appState.displayName;
+    final displayPhone = profile?.phoneNumber.isNotEmpty == true
+        ? profile!.phoneNumber
+        : appState.displayPhone;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
           // Profile Card
           GestureDetector(
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+              MaterialPageRoute(
+                builder: (context) => const EditProfileScreen(),
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
+                  color: isDark
+                      ? const Color(0xFF1E1E1E)
+                      : const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 32,
-                      backgroundColor: isDark ? Colors.grey[700] : Colors.grey[300],
+                      backgroundColor: isDark
+                          ? Colors.grey[700]
+                          : Colors.grey[300],
                       child: Icon(
                         Icons.person,
                         size: Responsive.icon(context, 40),
@@ -55,7 +68,7 @@ class SettingsTab extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            context.watch<AppState>().displayName,
+                            displayName,
                             style: TextStyle(
                               fontSize: Responsive.font(context, 18),
                               fontWeight: FontWeight.bold,
@@ -64,10 +77,12 @@ class SettingsTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            context.watch<AppState>().displayPhone,
+                            displayPhone,
                             style: TextStyle(
                               fontSize: Responsive.font(context, 14),
-                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -92,8 +107,9 @@ class SettingsTab extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: Responsive.font(context, 12),
                                   fontWeight: FontWeight.w600,
-                                  color:
-                                      isDark ? Colors.grey[300] : Colors.grey[700],
+                                  color: isDark
+                                      ? Colors.grey[300]
+                                      : Colors.grey[700],
                                 ),
                               ),
                             ],
@@ -103,14 +119,18 @@ class SettingsTab extends StatelessWidget {
                             'Profile completeness',
                             style: TextStyle(
                               fontSize: Responsive.font(context, 12),
-                              color:
-                                  isDark ? Colors.grey[500] : Colors.grey[600],
+                              color: isDark
+                                  ? Colors.grey[500]
+                                  : Colors.grey[600],
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+                    Icon(
+                      Icons.chevron_right,
+                      color: isDark ? Colors.grey[600] : Colors.grey[400],
+                    ),
                   ],
                 ),
               ),
@@ -124,9 +144,11 @@ class SettingsTab extends StatelessWidget {
             context,
             Icons.palette_outlined,
             'Theme & Wallpaper',
-                () => Navigator.push(
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ThemeSettingsScreen()),
+              MaterialPageRoute(
+                builder: (context) => const ThemeSettingsScreen(),
+              ),
             ),
           ),
           // Dark Mode Quick Toggle
@@ -170,18 +192,22 @@ class SettingsTab extends StatelessWidget {
             context,
             Icons.edit,
             'Edit Profile',
-                () => Navigator.push(
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const EditProfileScreen()),
+              MaterialPageRoute(
+                builder: (context) => const EditProfileScreen(),
+              ),
             ),
           ),
           _buildListTile(
             context,
             Icons.photo_library,
             'Manage Photos',
-                () => Navigator.push(
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ManagePhotosScreen()),
+              MaterialPageRoute(
+                builder: (context) => const ManagePhotosScreen(),
+              ),
             ),
           ),
           const Divider(height: 1),
@@ -192,21 +218,18 @@ class SettingsTab extends StatelessWidget {
             context,
             Icons.tune,
             'Discovery Settings',
-                () => Navigator.push(
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const DiscoverySettingsScreen()),
+              MaterialPageRoute(
+                builder: (context) => const DiscoverySettingsScreen(),
+              ),
             ),
           ),
-          _buildListTile(
-            context,
-            Icons.notifications,
-            'Notifications',
-                () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notifications coming soon')),
-              );
-            },
-          ),
+          _buildListTile(context, Icons.notifications, 'Notifications', () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notifications coming soon')),
+            );
+          }),
           const Divider(height: 1),
 
           // Safety & Privacy Section
@@ -215,53 +238,35 @@ class SettingsTab extends StatelessWidget {
             context,
             Icons.block,
             'Blocked Users',
-                () => Navigator.push(
+            () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const BlockedUsersScreen()),
+              MaterialPageRoute(
+                builder: (context) => const BlockedUsersScreen(),
+              ),
             ),
           ),
-          _buildListTile(
-            context,
-            Icons.privacy_tip,
-            'Privacy Settings',
-                () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Privacy Settings coming soon')),
-              );
-            },
-          ),
+          _buildListTile(context, Icons.privacy_tip, 'Privacy Settings', () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Privacy Settings coming soon')),
+            );
+          }),
           const Divider(height: 1),
 
           // Support Section
           _buildSection(context, 'Support', isDark),
-          _buildListTile(
-            context,
-            Icons.help_outline,
-            'Help & FAQ',
-                () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Help & FAQ coming soon')),
-              );
-            },
-          ),
-          _buildListTile(
-            context,
-            Icons.mail_outline,
-            'Contact Support',
-                () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Contact Support coming soon')),
-              );
-            },
-          ),
-          _buildListTile(
-            context,
-            Icons.info_outline,
-            'About',
-                () {
-              _showAboutDialog(context);
-            },
-          ),
+          _buildListTile(context, Icons.help_outline, 'Help & FAQ', () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Help & FAQ coming soon')),
+            );
+          }),
+          _buildListTile(context, Icons.mail_outline, 'Contact Support', () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Contact Support coming soon')),
+            );
+          }),
+          _buildListTile(context, Icons.info_outline, 'About', () {
+            _showAboutDialog(context);
+          }),
           const Divider(height: 1),
 
           // Account Section
@@ -270,16 +275,19 @@ class SettingsTab extends StatelessWidget {
             context,
             Icons.logout,
             'Log Out',
-                () => _showLogoutDialog(context),
+            () => _showLogoutDialog(context),
             color: Colors.red,
           ),
           _buildListTile(
             context,
             Icons.delete_outline,
             'Delete Account',
-                () => _showDeleteAccountDialog(context),
+            () => _showDeleteAccountDialog(context),
             color: Colors.red,
           ),
+
+          const SizedBox(height: 10),
+          const _BackendStatusPanel(),
 
           const SizedBox(height: 24),
 
@@ -330,12 +338,12 @@ class SettingsTab extends StatelessWidget {
   }
 
   Widget _buildListTile(
-      BuildContext context,
-      IconData icon,
-      String title,
-      VoidCallback onTap, {
-        Color? color,
-      }) {
+    BuildContext context,
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
+    Color? color,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListTile(
       leading: Icon(
@@ -380,21 +388,25 @@ class SettingsTab extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.black87),
+                style: TextStyle(
+                  color: isDark ? Colors.grey[400] : Colors.black87,
+                ),
               ),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                await context.read<AuthProvider>().signOut();
+                if (!context.mounted) return;
                 Navigator.of(context).pop();
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const WelcomeScreen(),
+                  ),
                   (route) => false,
                 );
               },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Log Out'),
             ),
           ],
@@ -426,7 +438,9 @@ class SettingsTab extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.black87),
+                style: TextStyle(
+                  color: isDark ? Colors.grey[400] : Colors.black87,
+                ),
               ),
             ),
             TextButton(
@@ -439,9 +453,7 @@ class SettingsTab extends StatelessWidget {
                   ),
                 );
               },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),
             ),
           ],
@@ -506,3 +518,174 @@ class SettingsTab extends StatelessWidget {
   }
 }
 
+class _BackendStatusPanel extends StatefulWidget {
+  const _BackendStatusPanel();
+
+  @override
+  State<_BackendStatusPanel> createState() => _BackendStatusPanelState();
+}
+
+class _BackendStatusPanelState extends State<_BackendStatusPanel> {
+  final BackendApi _backendApi = BackendApi();
+
+  bool _checking = false;
+  bool? _apiReachable;
+  DateTime? _lastCheckedAt;
+  String? _error;
+
+  Future<void> _checkApi() async {
+    if (_checking) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
+
+    try {
+      final reachable = await _backendApi.ping();
+      if (!mounted) return;
+      setState(() {
+        _apiReachable = reachable;
+        _lastCheckedAt = DateTime.now();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _apiReachable = false;
+        _lastCheckedAt = DateTime.now();
+        _error = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checking = false;
+        });
+      }
+    }
+  }
+
+  String _timeLabel(DateTime time) {
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    final ss = time.second.toString().padLeft(2, '0');
+    return '$hh:$mm:$ss';
+  }
+
+  Widget _statusChip({required String label, required bool ok}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: ok
+            ? Colors.green.withOpacity(0.12)
+            : Colors.red.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: ok ? Colors.green[800] : Colors.red[800],
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final auth = context.watch<AuthProvider>();
+    final isFirebaseAuthed = auth.isAuthenticated;
+    final hasBackendToken =
+        auth.backendToken != null && auth.backendToken!.isNotEmpty;
+    final hasBackendSession = auth.isBackendAuthenticated;
+    final backendUserId = auth.backendUserId;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colorScheme.primary.withOpacity(0.15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.developer_mode,
+                  size: Responsive.icon(context, 18),
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Backend Status (Debug)',
+                  style: TextStyle(
+                    fontSize: Responsive.font(context, 14),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _statusChip(label: 'Firebase Auth', ok: isFirebaseAuthed),
+                _statusChip(label: 'Backend Token', ok: hasBackendToken),
+                _statusChip(label: 'Backend Session', ok: hasBackendSession),
+                _statusChip(label: 'API Reachable', ok: _apiReachable == true),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Backend User ID: ${backendUserId ?? 'Not resolved'}',
+              style: TextStyle(
+                fontSize: Responsive.font(context, 12),
+                color: colorScheme.onSurface.withOpacity(0.75),
+              ),
+            ),
+            if (_lastCheckedAt != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Last checked: ${_timeLabel(_lastCheckedAt!)}',
+                style: TextStyle(
+                  fontSize: Responsive.font(context, 12),
+                  color: colorScheme.onSurface.withOpacity(0.75),
+                ),
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Error: $_error',
+                style: TextStyle(
+                  fontSize: Responsive.font(context, 12),
+                  color: Colors.red[700],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _checking ? null : _checkApi,
+                icon: _checking
+                    ? SizedBox(
+                        height: Responsive.icon(context, 16),
+                        width: Responsive.icon(context, 16),
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.network_check),
+                label: Text(_checking ? 'Checking...' : 'Check Connection'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

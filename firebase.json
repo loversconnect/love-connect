@@ -1,0 +1,29 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "love-connect-68400",
+          "appId": "1:336945148797:android:7c70ab2c05b108d7c99214",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "love-connect-68400",
+          "configurations": {
+            "android": "1:336945148797:android:7c70ab2c05b108d7c99214",
+            "ios": "1:336945148797:ios:6ec8b150fb53e681c99214"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Add%20photos%20screen.dart';
+import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/app_state.dart';
@@ -67,13 +69,32 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
     return age;
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (_isValid) {
       context.read<AppState>().setUserName(
             firstNameValue: _firstNameController.text.trim(),
             lastNameValue: _lastNameController.text.trim(),
           );
-      // In real app: Save to Firebase
+      final age = _calculateAge(_selectedDate!);
+      final auth = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
+
+      await profileProvider.upsertBasics(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        age: age,
+        gender: _selectedGender ?? 'Other',
+        phoneNumber: auth.currentPhoneNumber ?? '',
+      );
+      if (!mounted) return;
+
+      if (profileProvider.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(profileProvider.error!)),
+        );
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const AddPhotosScreen()),
@@ -92,6 +113,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final profileProvider = context.watch<ProfileProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -245,7 +267,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isValid ? _continue : null,
+                  onPressed: (_isValid && !profileProvider.isLoading) ? _continue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         _isValid ? colorScheme.primary : colorScheme.surfaceVariant,
@@ -253,7 +275,13 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                         ? colorScheme.onPrimary
                         : colorScheme.onSurface,
                   ),
-                  child: const Text('Continue'),
+                  child: profileProvider.isLoading
+                      ? SizedBox(
+                          width: Responsive.icon(context, 20),
+                          height: Responsive.icon(context, 20),
+                          child: const CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue'),
                 ),
               ),
             ),

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Profile%20detail%20screen.dart';
 import 'package:lerolove/Screens/Discovery%20settings%20screen.dart';
 import 'package:lerolove/Screens/Chat%20detail%20screen.dart';
-import 'package:lerolove/Utils/app_state.dart';
+import 'package:lerolove/models/user_profile.dart';
+import 'package:lerolove/providers/discovery_provider.dart';
+import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 
 class DiscoverTab extends StatefulWidget {
@@ -51,19 +53,17 @@ class _DiscoverTabState extends State<DiscoverTab>
     _swipeController!.stop();
     _swipeController!.reset();
     _isAnimatingOut = target != 0;
-    _swipeAnimation = Tween<double>(
-      begin: _dragDistance,
-      end: target,
-    ).animate(
-      CurvedAnimation(
-        parent: _swipeController!,
-        curve: Curves.easeOutCubic,
-      ),
-    )..addListener(() {
-        setState(() {
-          _dragDistance = _swipeAnimation!.value;
+    _swipeAnimation =
+        Tween<double>(begin: _dragDistance, end: target).animate(
+          CurvedAnimation(
+            parent: _swipeController!,
+            curve: Curves.easeOutCubic,
+          ),
+        )..addListener(() {
+          setState(() {
+            _dragDistance = _swipeAnimation!.value;
+          });
         });
-      });
 
     _swipeController!.forward().whenComplete(() {
       if (target == 0) {
@@ -79,8 +79,8 @@ class _DiscoverTabState extends State<DiscoverTab>
   }
 
   void _onSwipe(bool liked) {
-    final appState = context.read<AppState>();
-    final profiles = appState.discoverProfiles;
+    final discovery = context.read<DiscoveryProvider>();
+    final profiles = discovery.discoverProfiles;
     if (profiles.isEmpty) return;
 
     final currentProfile = profiles.first;
@@ -91,15 +91,24 @@ class _DiscoverTabState extends State<DiscoverTab>
     _dismissSwipeHint();
 
     if (liked) {
-      appState.likeProfile(currentProfile.id);
-      _showMessagePrompt(currentProfile);
-      return;
+      discovery.likeProfile(currentProfile).then((matchId) {
+        if (!mounted) return;
+        if (matchId != null) {
+          context.read<MatchesProvider>().registerMatch(
+            matchId: matchId,
+            peerUserId: currentProfile.id,
+            peerName: currentProfile.name,
+          );
+          _showMessagePrompt(currentProfile, matchId);
+        }
+      });
+    } else {
+      discovery.passProfile(currentProfile.id);
     }
-
-    appState.passProfile(currentProfile.id);
   }
 
-  Future<void> _openProfileDetail(DatingProfile profile) async {
+  Future<void> _openProfileDetail(UserProfile profile) async {
+    final discovery = context.read<DiscoveryProvider>();
     _dismissSwipeHint();
     final action = await Navigator.push<bool>(
       context,
@@ -107,7 +116,7 @@ class _DiscoverTabState extends State<DiscoverTab>
         builder: (context) => ProfileDetailScreen(
           name: profile.name,
           age: profile.age,
-          distance: profile.distanceKm,
+          distance: discovery.distanceFromCurrent(profile).round(),
           bio: profile.bio,
           isOnline: profile.isOnline,
         ),
@@ -121,13 +130,11 @@ class _DiscoverTabState extends State<DiscoverTab>
   void _openDiscoverySettings() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const DiscoverySettingsScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const DiscoverySettingsScreen()),
     );
   }
 
-  void _showMessagePrompt(DatingProfile profile) {
+  void _showMessagePrompt(UserProfile profile, String matchId) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -144,88 +151,89 @@ class _DiscoverTabState extends State<DiscoverTab>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                Icon(
-                  Icons.favorite,
-                  size: Responsive.icon(context, 58),
-                  color: colorScheme.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Like Sent',
-                  style: textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                  Icon(
+                    Icons.favorite,
+                    size: Responsive.icon(context, 58),
+                    color: colorScheme.primary,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Start a conversation with ${profile.name}',
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onBackground.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: colorScheme.surfaceVariant,
-                  child: Text(
-                    profile.name[0],
-                    style: TextStyle(
-                      fontSize: Responsive.font(context, 24),
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Like Sent',
+                    style: textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  profile.name,
-                  style: textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Start a conversation with ${profile.name}',
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onBackground.withOpacity(0.7),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: BorderSide(color: colorScheme.primary),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Keep Swiping'),
+                  const SizedBox(height: 20),
+                  CircleAvatar(
+                    radius: 44,
+                    backgroundColor: colorScheme.surfaceVariant,
+                    child: Text(
+                      profile.name[0],
+                      style: TextStyle(
+                        fontSize: Responsive.font(context, 24),
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatDetailScreen(
-                                matchName: profile.name,
-                                matchId: profile.id,
-                              ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    profile.name,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: colorScheme.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
                           ),
+                          child: const Text('Keep Swiping'),
                         ),
-                        child: const Text('Message Now'),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatDetailScreen(
+                                  matchName: profile.name,
+                                  matchId: matchId,
+                                  peerUserId: profile.id,
+                                ),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Message Now'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -253,8 +261,8 @@ class _DiscoverTabState extends State<DiscoverTab>
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final appState = context.watch<AppState>();
-    final profiles = appState.discoverProfiles;
+    final discovery = context.watch<DiscoveryProvider>();
+    final profiles = discovery.discoverProfiles;
 
     return Scaffold(
       appBar: AppBar(
@@ -281,7 +289,7 @@ class _DiscoverTabState extends State<DiscoverTab>
           ? _buildEmptyState()
           : Column(
               children: [
-                _buildSortRow(appState),
+                _buildSortRow(discovery),
                 Expanded(
                   child: Stack(
                     children: [
@@ -290,7 +298,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: RepaintBoundary(
-                              child: _buildProfileCard(profiles[1], appState),
+                              child: _buildProfileCard(profiles[1], discovery),
                             ),
                           ),
                         ),
@@ -305,14 +313,17 @@ class _DiscoverTabState extends State<DiscoverTab>
                           },
                           onPanEnd: (details) {
                             if (_isAnimatingOut) return;
-                            final velocity = details.velocity.pixelsPerSecond.dx;
+                            final velocity =
+                                details.velocity.pixelsPerSecond.dx;
                             final shouldSwipe =
-                                _dragDistance.abs() > 100 || velocity.abs() > 800;
+                                _dragDistance.abs() > 100 ||
+                                velocity.abs() > 800;
                             final direction = _dragDistance >= 0 ? 1 : -1;
 
                             if (shouldSwipe) {
-                              final screenWidth =
-                                  MediaQuery.of(context).size.width;
+                              final screenWidth = MediaQuery.of(
+                                context,
+                              ).size.width;
                               _animateSwipeTo(
                                 direction * (screenWidth + 120),
                                 onComplete: () => _onSwipe(direction > 0),
@@ -330,7 +341,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                                 child: RepaintBoundary(
                                   child: _buildProfileCard(
                                     profiles.first,
-                                    appState,
+                                    discovery,
                                   ),
                                 ),
                               ),
@@ -472,7 +483,7 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 
-  Widget _buildSortRow(AppState appState) {
+  Widget _buildSortRow(DiscoveryProvider discovery) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -480,18 +491,32 @@ class _DiscoverTabState extends State<DiscoverTab>
         children: [
           ChoiceChip(
             label: const Text('Nearby First'),
-            selected: appState.discoverSortMode == DiscoverSortMode.nearby,
-            onSelected: (_) => appState.setDiscoverSortMode(DiscoverSortMode.nearby),
+            selected: discovery.discoverSortMode == DiscoverSortMode.nearby,
+            onSelected: (_) => discovery.updateDiscoverySettings(
+              interestedInValue: discovery.interestedIn,
+              ageRangeValue: discovery.ageRange,
+              maxDistanceKmValue: discovery.maxDistanceKm,
+              showOnlineOnlyValue: discovery.showOnlineOnly,
+              verifiedProfilesOnlyValue: discovery.verifiedProfilesOnly,
+              discoverSortModeValue: DiscoverSortMode.nearby,
+            ),
           ),
           const SizedBox(width: 10),
           ChoiceChip(
             label: const Text('Best Relation'),
-            selected: appState.discoverSortMode == DiscoverSortMode.bestMatch,
-            onSelected: (_) => appState.setDiscoverSortMode(DiscoverSortMode.bestMatch),
+            selected: discovery.discoverSortMode == DiscoverSortMode.bestMatch,
+            onSelected: (_) => discovery.updateDiscoverySettings(
+              interestedInValue: discovery.interestedIn,
+              ageRangeValue: discovery.ageRange,
+              maxDistanceKmValue: discovery.maxDistanceKm,
+              showOnlineOnlyValue: discovery.showOnlineOnly,
+              verifiedProfilesOnlyValue: discovery.verifiedProfilesOnly,
+              discoverSortModeValue: DiscoverSortMode.bestMatch,
+            ),
           ),
           const Spacer(),
           Text(
-            '${appState.estimatedMatches} nearby',
+            '${discovery.estimatedMatches} nearby',
             style: TextStyle(
               fontSize: Responsive.font(context, 13),
               fontWeight: FontWeight.w600,
@@ -503,9 +528,10 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 
-  Widget _buildProfileCard(DatingProfile profile, AppState appState) {
+  Widget _buildProfileCard(UserProfile profile, DiscoveryProvider discovery) {
     final colorScheme = Theme.of(context).colorScheme;
-    final score = appState.compatibilityScore(profile);
+    final score = discovery.compatibilityScore(profile);
+    final distance = discovery.distanceFromCurrent(profile).round();
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
@@ -535,7 +561,10 @@ class _DiscoverTabState extends State<DiscoverTab>
               top: 16,
               left: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withOpacity(0.92),
                   borderRadius: BorderRadius.circular(16),
@@ -614,7 +643,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${profile.distanceKm} km away',
+                          '$distance km away',
                           style: TextStyle(
                             fontSize: Responsive.font(context, 15),
                             color: Colors.white70,
@@ -724,10 +753,7 @@ class _DiscoverTabState extends State<DiscoverTab>
             decoration: BoxDecoration(
               color: colorScheme.surface,
               shape: BoxShape.circle,
-              border: Border.all(
-                color: color.withOpacity(0.35),
-                width: 2,
-              ),
+              border: Border.all(color: color.withOpacity(0.35), width: 2),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.06),
@@ -783,14 +809,12 @@ class _DiscoverTabState extends State<DiscoverTab>
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: () => context.read<AppState>().resetDiscoverQueue(),
+            onPressed: () =>
+                context.read<DiscoveryProvider>().resetDiscoverQueue(),
             icon: const Icon(Icons.refresh),
             label: const Text('Reload Nearby'),
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -798,4 +822,3 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 }
-

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
-import 'package:lerolove/Utils/app_state.dart';
+import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 
 class PreferencesScreen extends StatefulWidget {
@@ -26,18 +26,18 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized) return;
-    final appState = context.read<AppState>();
-    _interestedIn = appState.interestedIn;
-    _ageRange = appState.ageRange;
-    _maxDistance = appState.maxDistanceKm;
-    _showOnlineOnly = appState.showOnlineOnly;
-    _verifiedProfilesOnly = appState.verifiedProfilesOnly;
-    _sortMode = appState.discoverSortMode;
+    final discovery = context.read<DiscoveryProvider>();
+    _interestedIn = discovery.interestedIn;
+    _ageRange = discovery.ageRange;
+    _maxDistance = discovery.maxDistanceKm;
+    _showOnlineOnly = discovery.showOnlineOnly;
+    _verifiedProfilesOnly = discovery.verifiedProfilesOnly;
+    _sortMode = discovery.discoverSortMode;
     _initialized = true;
   }
 
-  void _startMatching() {
-    context.read<AppState>().updateDiscoverySettings(
+  Future<void> _startMatching() async {
+    await context.read<DiscoveryProvider>().updateDiscoverySettings(
           interestedInValue: _interestedIn,
           ageRangeValue: _ageRange,
           maxDistanceKmValue: _maxDistance,
@@ -45,6 +45,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
           verifiedProfilesOnlyValue: _verifiedProfilesOnly,
           discoverSortModeValue: _sortMode,
         );
+    if (!mounted) return;
 
     Navigator.pushAndRemoveUntil(
       context,
@@ -54,8 +55,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   }
 
   int _estimateLocalMatches() {
-    final appState = context.read<AppState>();
-    return appState.estimateMatchesFor(
+    final discovery = context.read<DiscoveryProvider>();
+    return discovery.estimateMatchesFor(
       interestedInValue: _interestedIn,
       ageRangeValue: _ageRange,
       maxDistanceKmValue: _maxDistance,

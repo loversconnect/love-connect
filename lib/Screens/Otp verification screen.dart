@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
+import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
 
@@ -80,13 +82,20 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
       _isVerifying = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(milliseconds: 800));
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.verifySmsCode(code);
 
     if (!mounted) return;
     setState(() {
       _isVerifying = false;
     });
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error ?? 'Invalid verification code')),
+      );
+      return;
+    }
 
     // Navigate to profile basics first, clearing navigation stack
     Navigator.pushAndRemoveUntil(
@@ -98,16 +107,26 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
   void _resendCode() {
     if (!_canResend) return;
-
-    // In real app: Resend OTP via Firebase
-    _startResendTimer();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Verification code sent'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    context.read<AuthProvider>().startPhoneVerification(widget.phoneNumber).then((ok) {
+      if (!mounted) return;
+      if (ok) {
+        _startResendTimer();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification code sent'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.read<AuthProvider>().error ?? 'Failed to resend verification code',
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override
