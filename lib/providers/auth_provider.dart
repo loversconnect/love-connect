@@ -39,9 +39,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _firebaseUser != null || _localUid != null;
   String? get currentPhoneNumber =>
       _firebaseUser?.phoneNumber ?? _localPhoneNumber;
-
-  String? _verificationId;
-  int? _resendToken;
+  String? _pendingOtpPhone;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -253,48 +251,27 @@ class AuthProvider extends ChangeNotifier {
     _setLoading(true);
     _setError(null);
 
-    final completer = Completer<bool>();
-
     try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        forceResendingToken: _resendToken,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          try {
-            await _auth.signInWithCredential(credential);
-            if (!completer.isCompleted) completer.complete(true);
-          } catch (e) {
-            if (!completer.isCompleted) completer.complete(false);
-          }
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          _setError(e.message ?? 'Phone verification failed.');
-          if (!completer.isCompleted) completer.complete(false);
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
-          _resendToken = resendToken;
-          if (!completer.isCompleted) completer.complete(true);
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          _verificationId = verificationId;
-        },
-      );
-    } catch (e) {
-      _setError('Could not start verification. Please try again.');
+      final normalized = phoneNumber.replaceAll(RegExp(r'\s+'), '');
+      await _backendApi.sendOtp(phone: normalized);
+      _pendingOtpPhone = normalized;
+      _localPhoneNumber = normalized;
+      _setLoading(false);
+      return true;
+    } on ApiException catch (e) {
+      _setError(e.message);
+      _setLoading(false);
+      return false;
+    } catch (_) {
+      _setError('Could not send OTP. Please try again.');
       _setLoading(false);
       return false;
     }
-
-    final success = await completer.future;
-    _setLoading(false);
-    return success;
   }
 
   Future<bool> verifySmsCode(String smsCode) async {
-    final verificationId = _verificationId;
-    if (verificationId == null) {
+    final phone = _pendingOtpPhone ?? _localPhoneNumber;
+    if (phone == null || phone.isEmpty) {
       _setError('Verification session expired. Request a new code.');
       return false;
     }
@@ -303,16 +280,27 @@ class AuthProvider extends ChangeNotifier {
     _setError(null);
 
     try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-      await _auth.signInWithCredential(credential);
-      await ensureBackendSession();
+      final result = await _backendApi.verifyOtp(phone: phone, otp: smsCode);
+      if (!result.success) {
+        _setError(result.message ?? 'Invalid code.');
+        _setLoading(false);
+        return false;
+      }
+
+      final digitsOnly = phone.replaceAll(RegExp(r'[^0-9]'), '');
+      _localUid = 'local_$digitsOnly';
+      _localPhoneNumber = phone;
+      _pendingOtpPhone = null;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_localUidKey, _localUid!);
+      await prefs.setString(_localPhoneKey, _localPhoneNumber!);
+
+      final backendOk = await ensureBackendSession();
       _setLoading(false);
-      return isBackendAuthenticated;
-    } on FirebaseAuthException catch (e) {
-      _setError(e.message ?? 'Invalid code.');
+      return backendOk;
+    } on ApiException catch (e) {
+      _setError(e.message);
       _setLoading(false);
       return false;
     } catch (_) {

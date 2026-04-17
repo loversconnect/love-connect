@@ -39,6 +39,13 @@ class SwipeResultDto {
   final String? message;
 }
 
+class OtpVerifyResultDto {
+  OtpVerifyResultDto({required this.success, this.message});
+
+  final bool success;
+  final String? message;
+}
+
 class ChatMessageDto {
   ChatMessageDto({
     required this.id,
@@ -212,6 +219,32 @@ class BackendApi {
       throw ApiException('Missing access token from login response');
     }
     return token;
+  }
+
+  Future<void> sendOtp({required String phone}) async {
+    final response = await _post(
+      _uri('/auth/send-otp'),
+      headers: _headers(),
+      body: jsonEncode({'phone': phone}),
+    );
+    _ensureSuccess(response, fallback: 'Failed to send OTP');
+  }
+
+  Future<OtpVerifyResultDto> verifyOtp({
+    required String phone,
+    required String otp,
+  }) async {
+    final response = await _post(
+      _uri('/auth/verify-otp'),
+      headers: _headers(),
+      body: jsonEncode({'phone': phone, 'otp': otp}),
+    );
+    _ensureSuccess(response, fallback: 'Failed to verify OTP');
+    final body = _mapFromBody(_decode(response));
+    return OtpVerifyResultDto(
+      success: (body['success'] as bool?) ?? true,
+      message: body['message'] as String?,
+    );
   }
 
   Future<void> updateLocation({

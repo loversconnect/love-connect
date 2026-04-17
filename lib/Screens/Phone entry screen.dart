@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
+import 'package:lerolove/Screens/Otp%20verification%20screen.dart';
 import 'package:lerolove/Utils/app_state.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -38,7 +38,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
       final auth = context.read<AuthProvider>();
       final appState = context.read<AppState>();
       appState.setPhoneNumber(phoneNumber);
-      final ok = await auth.continueWithoutOtp(phoneNumber);
+      final ok = await auth.startPhoneVerification(phoneNumber);
       if (!mounted) return;
 
       if (!ok) {
@@ -50,7 +50,9 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
 
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const ProfileBasicsScreen()),
+        MaterialPageRoute(
+          builder: (context) => OTPVerificationScreen(phoneNumber: phoneNumber),
+        ),
       );
     }
   }
@@ -126,7 +128,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                       const SizedBox(height: 8),
                       // Subtitle
                       Text(
-                        'OTP via OneKhuza is coming soon. Continue to complete your profile setup for now.',
+                        'We will send a 6-digit OTP to verify your number.',
                         style: textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onBackground.withOpacity(0.7),
                           fontSize: Responsive.font(context, 15),

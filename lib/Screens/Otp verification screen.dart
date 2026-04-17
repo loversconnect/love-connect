@@ -9,10 +9,8 @@ import 'dart:async';
 class OTPVerificationScreen extends StatefulWidget {
   final String phoneNumber;
 
-  const OTPVerificationScreen({
-    Key? key,
-    required this.phoneNumber,
-  }) : super(key: key);
+  const OTPVerificationScreen({Key? key, required this.phoneNumber})
+    : super(key: key);
 
   @override
   State<OTPVerificationScreen> createState() => _OTPVerificationScreenState();
@@ -21,7 +19,7 @@ class OTPVerificationScreen extends StatefulWidget {
 class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
   final List<TextEditingController> _controllers = List.generate(
     6,
-        (index) => TextEditingController(),
+    (index) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
 
@@ -101,32 +99,36 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const ProfileBasicsScreen()),
-          (route) => false,
+      (route) => false,
     );
   }
 
   void _resendCode() {
     if (!_canResend) return;
-    context.read<AuthProvider>().startPhoneVerification(widget.phoneNumber).then((ok) {
-      if (!mounted) return;
-      if (ok) {
-        _startResendTimer();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Verification code sent'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.read<AuthProvider>().error ?? 'Failed to resend verification code',
-            ),
-          ),
-        );
-      }
-    });
+    context
+        .read<AuthProvider>()
+        .startPhoneVerification(widget.phoneNumber)
+        .then((ok) {
+          if (!mounted) return;
+          if (ok) {
+            _startResendTimer();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Verification code sent'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  context.read<AuthProvider>().error ??
+                      'Failed to resend verification code',
+                ),
+              ),
+            );
+          }
+        });
   }
 
   @override
@@ -204,7 +206,10 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               const SizedBox(height: 32),
               // OTP Input Card
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
@@ -223,14 +228,18 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                         textAlign: TextAlign.center,
                         keyboardType: TextInputType.number,
                         maxLength: 1,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         style: textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                           fontSize: Responsive.font(context, 20),
                         ),
                         decoration: InputDecoration(
                           counterText: '',
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
@@ -275,9 +284,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               // Loading Indicator
               if (_isVerifying)
                 Center(
-                  child: CircularProgressIndicator(
-                    color: colorScheme.primary,
-                  ),
+                  child: CircularProgressIndicator(color: colorScheme.primary),
                 ),
               const SizedBox(height: 16),
             ],
