@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
-import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
-import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
 
@@ -15,7 +13,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
@@ -29,13 +28,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     _controller.forward();
 
@@ -43,14 +44,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     Timer(const Duration(seconds: 2), () {
       if (mounted) {
         final auth = context.read<AuthProvider>();
-        final profile = context.read<ProfileProvider>();
         final Widget nextScreen;
         if (!auth.isAuthenticated) {
           nextScreen = const WelcomeScreen();
-        } else if (profile.hasCompletedProfile) {
-          nextScreen = const MainAppScreen();
         } else {
-          nextScreen = const ProfileBasicsScreen();
+          nextScreen = const MainAppScreen();
         }
         Navigator.pushReplacement(
           context,

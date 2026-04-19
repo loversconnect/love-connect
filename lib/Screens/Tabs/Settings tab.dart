@@ -594,7 +594,7 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final auth = context.watch<AuthProvider>();
-    final isFirebaseAuthed = auth.isAuthenticated;
+    final isOtpAuthed = auth.isAuthenticated;
     final hasBackendToken =
         auth.backendToken != null && auth.backendToken!.isNotEmpty;
     final hasBackendSession = auth.isBackendAuthenticated;
@@ -634,7 +634,7 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _statusChip(label: 'Firebase Auth', ok: isFirebaseAuthed),
+                _statusChip(label: 'OTP Auth', ok: isOtpAuthed),
                 _statusChip(label: 'Backend Token', ok: hasBackendToken),
                 _statusChip(label: 'Backend Session', ok: hasBackendSession),
                 _statusChip(label: 'API Reachable', ok: _apiReachable == true),

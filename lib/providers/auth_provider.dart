@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lerolove/services/backend_api.dart';
@@ -10,35 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _restoreLocalSession();
-    _authStateSub = _auth.authStateChanges().listen((user) async {
-      _firebaseUser = user;
-      if (user == null) {
-        if (_localUid == null) {
-          await _clearBackendState(clearPersisted: false);
-        } else {
-          await ensureBackendSession();
-        }
-        _notifySafely();
-        return;
-      }
-
-      await ensureBackendSession();
-      _notifySafely();
-    });
   }
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final BackendApi _backendApi = BackendApi();
 
-  User? _firebaseUser;
-  User? get firebaseUser => _firebaseUser;
   String? _localUid;
   String? _localPhoneNumber;
 
-  String? get uid => _firebaseUser?.uid ?? _localUid;
-  bool get isAuthenticated => _firebaseUser != null || _localUid != null;
-  String? get currentPhoneNumber =>
-      _firebaseUser?.phoneNumber ?? _localPhoneNumber;
+  String? get uid => _localUid;
+  bool get isAuthenticated => _localUid != null;
+  String? get currentPhoneNumber => _localPhoneNumber;
   String? _pendingOtpPhone;
 
   bool _isLoading = false;
@@ -59,7 +39,6 @@ class AuthProvider extends ChangeNotifier {
   bool get isBackendAuthenticated =>
       _backendToken != null && _backendToken!.isNotEmpty;
 
-  late final StreamSubscription<User?> _authStateSub;
   bool _pendingNotify = false;
   bool _isDisposed = false;
 
@@ -176,9 +155,7 @@ class AuthProvider extends ChangeNotifier {
         token = await _backendApi.register(
           email: email,
           password: password,
-          name: _firebaseUser?.displayName?.trim().isNotEmpty == true
-              ? _firebaseUser!.displayName!.trim()
-              : 'Lero User',
+          name: 'Lero User',
           gender: 'OTHER',
           birthDateIso: '1999-01-01',
         );
@@ -317,13 +294,12 @@ class AuthProvider extends ChangeNotifier {
     _localUid = null;
     _localPhoneNumber = null;
     await _clearBackendState(clearPersisted: true);
-    await _auth.signOut();
+    _notifySafely();
   }
 
   @override
   void dispose() {
     _isDisposed = true;
-    _authStateSub.cancel();
     super.dispose();
   }
 }

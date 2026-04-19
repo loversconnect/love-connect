@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
+import 'package:lerolove/Screens/Main%20app%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
@@ -95,10 +95,10 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
       return;
     }
 
-    // Navigate to profile basics first, clearing navigation stack
+    // Navigate straight to home, clearing navigation stack.
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const ProfileBasicsScreen()),
+      MaterialPageRoute(builder: (context) => const MainAppScreen()),
       (route) => false,
     );
   }

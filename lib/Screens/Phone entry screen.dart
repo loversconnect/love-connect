@@ -24,17 +24,18 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
   }
 
   void _validatePhone() {
-    // Malawi phone numbers are 9 digits after +265
     final phone = _phoneController.text.replaceAll(RegExp(r'\s+'), '');
     setState(() {
-      _isValid = phone.length == 9 && RegExp(r'^[0-9]+$').hasMatch(phone);
+      _isValid = RegExp(r'^\+?[1-9]\d{7,14}$').hasMatch(phone);
     });
   }
 
   Future<void> _continue() async {
     if (_isValid) {
-      final phoneNumber =
-          '+265${_phoneController.text.replaceAll(RegExp(r'\s+'), '')}';
+      final normalized = _phoneController.text.replaceAll(RegExp(r'\s+'), '');
+      final phoneNumber = normalized.startsWith('+')
+          ? normalized
+          : '+$normalized';
       final auth = context.read<AuthProvider>();
       final appState = context.read<AppState>();
       appState.setPhoneNumber(phoneNumber);
@@ -160,55 +161,18 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Country Code Selector
-                                Container(
-                                  height: 56,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surfaceVariant,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Center(
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          '🇲🇼',
-                                          style: TextStyle(
-                                            fontSize: Responsive.font(
-                                              context,
-                                              24,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '+265',
-                                          style: textTheme.bodyLarge?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: Responsive.font(
-                                              context,
-                                              16,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
                                 // Phone Number Input
                                 Expanded(
                                   child: TextField(
                                     controller: _phoneController,
                                     keyboardType: TextInputType.phone,
-                                    maxLength: 9,
                                     inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[0-9+]'),
+                                      ),
                                     ],
                                     decoration: const InputDecoration(
-                                      hintText: '991234567',
+                                      hintText: '+265991234567',
                                       counterText: '',
                                     ),
                                     style: textTheme.bodyLarge?.copyWith(
@@ -222,7 +186,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Enter your 9-digit Malawi phone number',
+                              'Use international format, for example +265991234567',
                               style: textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onBackground.withOpacity(
                                   0.55,
