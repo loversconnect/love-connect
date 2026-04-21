@@ -126,35 +126,26 @@ class DiscoveryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final ready = await auth.ensureBackendSession();
-      if (!ready || auth.backendToken == null) {
+      final token = await _resolveBackendToken();
+      if (token == null) {
         throw Exception('Backend session unavailable');
       }
 
-      final me = _profileProvider?.currentProfile;
-      double? lat = me?.latitude;
-      double? lng = me?.longitude;
-      if (lat == null || lng == null) {
-        final current = await _resolveCurrentLocation();
-        if (current != null) {
-          lat = current.latitude;
-          lng = current.longitude;
-          await _profileProvider?.updateLocalLocation(
-            latitude: lat,
-            longitude: lng,
-          );
-        }
+      final current = await _resolveCurrentLocation();
+      if (current == null) {
+        throw Exception('Location permission is required for discovery');
       }
-      if (lat != null && lng != null) {
-        await _backendApi.updateLocation(
-          token: auth.backendToken!,
-          lat: lat,
-          lng: lng,
-        );
-      }
+      final lat = current.latitude;
+      final lng = current.longitude;
+
+      await _profileProvider?.updateLocalLocation(
+        latitude: lat,
+        longitude: lng,
+      );
+      await _backendApi.updateLocation(token: token, lat: lat, lng: lng);
 
       final backendUsers = await _backendApi.discovery(
-        token: auth.backendToken!,
+        token: token,
         radiusKm: maxDistanceKm,
       );
 
@@ -193,12 +184,28 @@ class DiscoveryProvider extends ChangeNotifier {
             );
           })
           .toList(growable: false);
-    } catch (_) {
-      _error = 'Could not load nearby profiles.';
+    } catch (e) {
+      _error = e.toString().contains('Location permission')
+          ? 'Enable location permission to discover nearby people.'
+          : 'Could not load nearby profiles.';
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<String?> _resolveBackendToken() async {
+    final auth = _auth;
+    if (auth == null) return null;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final ready = await auth.ensureBackendSession();
+      final token = auth.backendToken;
+      if (ready && token != null && token.isNotEmpty) {
+        return token;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+    }
+    return null;
   }
 
   int _calculateAge(DateTime birthDate) {
@@ -229,10 +236,8 @@ class DiscoveryProvider extends ChangeNotifier {
     await loadProfiles();
   }
 
-  Future<String?> likeProfile(UserProfile profile) async {
-    final auth = _auth;
-    if (auth == null) return null;
-    final token = auth.backendToken;
+  Future<SwipeResultDto?> likeProfile(UserProfile profile) async {
+    final token = await _resolveBackendToken();
     if (token == null) return null;
 
     _likedProfileIds.add(profile.id);
@@ -245,8 +250,7 @@ class DiscoveryProvider extends ChangeNotifier {
         swipedId: profile.id,
         action: true,
       );
-      if (!result.isMatch) return null;
-      return result.matchId;
+      return result;
     } catch (_) {
       return null;
     }
@@ -259,9 +263,7 @@ class DiscoveryProvider extends ChangeNotifier {
   }
 
   Future<void> _sendPassSwipe(String profileId) async {
-    final auth = _auth;
-    if (auth == null) return;
-    final token = auth.backendToken;
+    final token = await _resolveBackendToken();
     if (token == null || token.isEmpty) return;
 
     try {

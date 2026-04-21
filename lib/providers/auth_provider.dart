@@ -38,6 +38,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool _backendLoading = false;
   bool get backendLoading => _backendLoading;
+  Future<bool>? _backendSessionInFlight;
   bool _hasRestoredSession = false;
   bool get hasRestoredSession => _hasRestoredSession;
 
@@ -93,6 +94,12 @@ class AuthProvider extends ChangeNotifier {
 
   String _fallbackEmailForUid(String uid) => 'u_$uid@lerolove.app';
   String _fallbackPasswordForUid(String uid) => 'LeroLove_${uid}_Secure_2026';
+  List<String> _legacyPasswordsForUid(String uid) => <String>[
+    _fallbackPasswordForUid(uid),
+    'LeroLove_${uid}_Secure_2025',
+    'LeroLove_${uid}_Secure_2024',
+    'LeroLove_${uid}_Secure',
+  ];
 
   String? _extractBackendUserIdFromToken(String token) {
     try {
@@ -145,6 +152,34 @@ class AuthProvider extends ChangeNotifier {
     return DateTime.now().toUtc().add(const Duration(minutes: 2)).isAfter(exp);
   }
 
+  bool _isEmailTakenMessage(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('email taken') || lower.contains('email already');
+  }
+
+  Future<(AuthSessionDto session, String password)> _loginWithCandidates({
+    required String email,
+    required List<String> passwordCandidates,
+  }) async {
+    ApiException? lastError;
+    for (final candidate in passwordCandidates) {
+      try {
+        final session = await _backendApi.login(
+          email: email,
+          password: candidate,
+        );
+        return (session, candidate);
+      } on ApiException catch (e) {
+        lastError = e;
+      }
+    }
+
+    throw lastError ??
+        ApiException(
+          'Could not establish backend session with known credentials',
+        );
+  }
+
   Future<void> _restoreLocalSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -161,9 +196,24 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> ensureBackendSession() async {
+    final inFlight = _backendSessionInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _ensureBackendSessionInternal();
+    _backendSessionInFlight = future;
+    future.whenComplete(() {
+      if (identical(_backendSessionInFlight, future)) {
+        _backendSessionInFlight = null;
+      }
+    });
+    return future;
+  }
+
+  Future<bool> _ensureBackendSessionInternal() async {
     final effectiveUid = uid;
     if (effectiveUid == null || effectiveUid.isEmpty) return false;
-    if (_backendLoading) return false;
     if (isBackendAuthenticated) return true;
 
     _setBackendLoading(true);
@@ -223,29 +273,54 @@ class AuthProvider extends ChangeNotifier {
       final email =
           prefs.getString(_backendEmailKey(effectiveUid)) ??
           _fallbackEmailForUid(effectiveUid);
-      final password =
+      final configuredPassword =
           prefs.getString(_backendPasswordKey(effectiveUid)) ??
           _fallbackPasswordForUid(effectiveUid);
+      final passwordCandidates = <String>[
+        configuredPassword,
+        ..._legacyPasswordsForUid(effectiveUid),
+      ].toSet().toList(growable: false);
 
       String token;
       String refreshToken;
+      String resolvedPassword;
       try {
-        final session = await _backendApi.login(
+        final result = await _loginWithCandidates(
           email: email,
-          password: password,
+          passwordCandidates: passwordCandidates,
         );
+        final session = result.$1;
+        resolvedPassword = result.$2;
         token = session.accessToken;
         refreshToken = session.refreshToken;
-      } on ApiException catch (_) {
-        final session = await _backendApi.register(
-          email: email,
-          password: password,
-          name: 'Lero User',
-          gender: 'OTHER',
-          birthDateIso: '1999-01-01',
-        );
-        token = session.accessToken;
-        refreshToken = session.refreshToken;
+      } on ApiException catch (loginError) {
+        try {
+          final session = await _backendApi.register(
+            email: email,
+            password: configuredPassword,
+            name: 'Lero User',
+            gender: 'OTHER',
+            birthDateIso: '1999-01-01',
+          );
+          resolvedPassword = configuredPassword;
+          token = session.accessToken;
+          refreshToken = session.refreshToken;
+        } on ApiException catch (registerError) {
+          if (_isEmailTakenMessage(registerError.message)) {
+            final recovered = await _loginWithCandidates(
+              email: email,
+              passwordCandidates: passwordCandidates,
+            );
+            final session = recovered.$1;
+            resolvedPassword = recovered.$2;
+            token = session.accessToken;
+            refreshToken = session.refreshToken;
+          } else {
+            rethrow;
+          }
+        } catch (_) {
+          throw loginError;
+        }
       }
 
       _backendToken = token;
@@ -255,7 +330,10 @@ class AuthProvider extends ChangeNotifier {
       await prefs.setString(_tokenKey(effectiveUid), token);
       await prefs.setString(_refreshTokenKey(effectiveUid), refreshToken);
       await prefs.setString(_backendEmailKey(effectiveUid), email);
-      await prefs.setString(_backendPasswordKey(effectiveUid), password);
+      await prefs.setString(
+        _backendPasswordKey(effectiveUid),
+        resolvedPassword,
+      );
       if (_backendUserId != null) {
         await prefs.setString(_backendUserIdKey(effectiveUid), _backendUserId!);
       }

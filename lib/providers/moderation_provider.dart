@@ -40,13 +40,16 @@ class ModerationProvider extends ChangeNotifier {
   Future<bool> _ensureReady() async {
     final auth = _auth;
     if (auth == null) return false;
-    final ready = await auth.ensureBackendSession();
-    if (!ready || auth.backendToken == null || auth.backendToken!.isEmpty) {
-      _error = 'Backend session unavailable';
-      notifyListeners();
-      return false;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final ready = await auth.ensureBackendSession();
+      if (ready && auth.backendToken != null && auth.backendToken!.isNotEmpty) {
+        return true;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
     }
-    return true;
+    _error = 'Backend session unavailable';
+    notifyListeners();
+    return false;
   }
 
   Future<void> refreshBlockedUsers() async {

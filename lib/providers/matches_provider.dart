@@ -60,6 +60,7 @@ class MatchesProvider extends ChangeNotifier {
     notifyListeners();
 
     _loadPersistedMatches().then((_) async {
+      await _syncBackendMatches();
       await _refreshAllHistories();
       _isLoading = false;
       notifyListeners();
@@ -180,6 +181,57 @@ class MatchesProvider extends ChangeNotifier {
       }
     } catch (_) {
       _matches = const [];
+    }
+  }
+
+  Future<void> _syncBackendMatches() async {
+    final auth = _auth;
+    final token = auth?.backendToken;
+    final me = auth?.backendUserId;
+    if (token == null || token.isEmpty || me == null) return;
+
+    try {
+      final backendMatches = await _backendApi.myMatches(token: token);
+      if (backendMatches.isEmpty) return;
+
+      var changed = false;
+      final copy = [..._matches];
+      for (final dto in backendMatches) {
+        final thread = MatchThread(
+          id: dto.matchId,
+          userIds: [me, dto.peerUserId]..sort(),
+          lastMessage: '',
+          lastMessageAt: dto.matchedAt ?? DateTime.now(),
+          lastSenderId: null,
+          unreadCounts: {me: 0},
+          isActive: true,
+          peerName: dto.peerName,
+          peerPhotoUrl: dto.peerPhotoUrl,
+        );
+
+        final index = copy.indexWhere((m) => m.id == dto.matchId);
+        if (index >= 0) {
+          final existing = copy[index];
+          copy[index] = existing.copyWith(
+            userIds: thread.userIds,
+            isActive: true,
+            peerName: thread.peerName,
+            peerPhotoUrl: thread.peerPhotoUrl,
+          );
+        } else {
+          copy.add(thread);
+        }
+        _matchPeerMap[dto.matchId] = dto.peerUserId;
+        changed = true;
+      }
+
+      if (changed) {
+        _matches = copy;
+        await _persistMatches();
+        notifyListeners();
+      }
+    } catch (_) {
+      // Keep local/persisted matches if network sync fails.
     }
   }
 

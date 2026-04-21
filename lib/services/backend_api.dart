@@ -33,10 +33,24 @@ class DiscoveryUserDto {
 }
 
 class SwipeResultDto {
-  SwipeResultDto({required this.isMatch, this.matchId, this.message});
+  SwipeResultDto({
+    required this.isMatch,
+    this.matchId,
+    this.chatId,
+    this.conversationReady,
+    this.peerUserId,
+    this.peerName,
+    this.peerPhotoUrl,
+    this.message,
+  });
 
   final bool isMatch;
   final String? matchId;
+  final String? chatId;
+  final bool? conversationReady;
+  final String? peerUserId;
+  final String? peerName;
+  final String? peerPhotoUrl;
   final String? message;
 }
 
@@ -87,6 +101,22 @@ class BlockedUserDto {
   final String userId;
   final String name;
   final DateTime? blockedAt;
+}
+
+class MatchSummaryDto {
+  MatchSummaryDto({
+    required this.matchId,
+    required this.peerUserId,
+    required this.peerName,
+    this.peerPhotoUrl,
+    this.matchedAt,
+  });
+
+  final String matchId;
+  final String peerUserId;
+  final String peerName;
+  final String? peerPhotoUrl;
+  final DateTime? matchedAt;
 }
 
 class BackendApi {
@@ -575,8 +605,35 @@ class BackendApi {
     return SwipeResultDto(
       isMatch: (result['isMatch'] as bool?) ?? false,
       matchId: result['matchId'] as String?,
+      chatId: result['chatId'] as String?,
+      conversationReady: result['conversationReady'] as bool?,
+      peerUserId: _mapFromBody(result['peer'])['id'] as String?,
+      peerName: _mapFromBody(result['peer'])['name'] as String?,
+      peerPhotoUrl: _mapFromBody(result['peer'])['photoUrl'] as String?,
       message: result['message'] as String?,
     );
+  }
+
+  Future<List<MatchSummaryDto>> myMatches({required String token}) async {
+    final response = await _get(
+      _uri('/swipes/matches'),
+      headers: _headers(token: token),
+    );
+    _ensureSuccess(response, fallback: 'Failed to load matches');
+    final body = _listFromBody(_decode(response));
+    return body
+        .map<MatchSummaryDto>((raw) {
+          final map = raw as Map<String, dynamic>;
+          return MatchSummaryDto(
+            matchId: (map['matchId'] as String?) ?? '',
+            peerUserId: (map['peerUserId'] as String?) ?? '',
+            peerName: (map['peerName'] as String?) ?? 'Match',
+            peerPhotoUrl: map['peerPhotoUrl'] as String?,
+            matchedAt: DateTime.tryParse((map['matchedAt'] as String?) ?? ''),
+          );
+        })
+        .where((e) => e.matchId.isNotEmpty && e.peerUserId.isNotEmpty)
+        .toList(growable: false);
   }
 
   Future<ChatMessageDto> sendMessage({

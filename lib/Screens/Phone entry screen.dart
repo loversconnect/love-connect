@@ -185,12 +185,26 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                                     controller: _phoneController,
                                     keyboardType: TextInputType.phone,
                                     maxLength: 9,
+                                    cursorColor: colorScheme.primary,
+                                    cursorWidth: 2.2,
+                                    cursorHeight: Responsive.font(context, 20),
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
                                     ],
-                                    decoration: const InputDecoration(
+                                    decoration: InputDecoration(
                                       hintText: '991234567',
+                                      hintStyle: textTheme.bodyLarge?.copyWith(
+                                        fontWeight: FontWeight.w500,
+                                        color: colorScheme.onSurface
+                                            .withOpacity(0.34),
+                                        fontSize: Responsive.font(context, 16),
+                                      ),
                                       counterText: '',
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                            horizontal: 2,
+                                          ),
                                     ),
                                     style: textTheme.bodyLarge?.copyWith(
                                       fontWeight: FontWeight.w600,

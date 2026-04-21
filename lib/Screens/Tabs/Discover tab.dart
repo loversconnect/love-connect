@@ -92,16 +92,29 @@ class _DiscoverTabState extends State<DiscoverTab>
     _dismissSwipeHint();
 
     if (liked) {
-      discovery.likeProfile(currentProfile).then((matchId) {
+      discovery.likeProfile(currentProfile).then((result) {
         if (!mounted) return;
-        if (matchId != null) {
+        if (result != null &&
+            result.isMatch &&
+            (result.matchId?.isNotEmpty ?? false)) {
+          final matchId = result.matchId!;
+          final peerId = (result.peerUserId?.isNotEmpty ?? false)
+              ? result.peerUserId!
+              : currentProfile.id;
+          final peerName = (result.peerName?.isNotEmpty ?? false)
+              ? result.peerName!
+              : currentProfile.name;
+          final peerPhoto = (result.peerPhotoUrl?.isNotEmpty ?? false)
+              ? result.peerPhotoUrl
+              : (currentProfile.photoUrls.isNotEmpty
+                    ? currentProfile.photoUrls.first
+                    : null);
+
           context.read<MatchesProvider>().registerMatch(
             matchId: matchId,
-            peerUserId: currentProfile.id,
-            peerName: currentProfile.name,
-            peerPhotoUrl: currentProfile.photoUrls.isNotEmpty
-                ? currentProfile.photoUrls.first
-                : null,
+            peerUserId: peerId,
+            peerName: peerName,
+            peerPhotoUrl: peerPhoto,
           );
           _showMessagePrompt(currentProfile, matchId);
         } else {
@@ -288,7 +301,7 @@ class _DiscoverTabState extends State<DiscoverTab>
         ],
       ),
       body: profiles.isEmpty
-          ? _buildEmptyState()
+          ? _buildEmptyState(discovery.error)
           : Column(
               children: [
                 _buildSortRow(discovery),
@@ -781,19 +794,20 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(String? errorText) {
+    final hasError = errorText != null && errorText.trim().isNotEmpty;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.inbox_outlined,
+            hasError ? Icons.location_off_outlined : Icons.inbox_outlined,
             size: Responsive.icon(context, 80),
             color: Colors.grey[400],
           ),
           const SizedBox(height: 16),
           Text(
-            'No more nearby profiles',
+            hasError ? 'Discovery Needs Location' : 'No more nearby profiles',
             style: TextStyle(
               fontSize: Responsive.font(context, 20),
               fontWeight: FontWeight.w600,
@@ -802,11 +816,12 @@ class _DiscoverTabState extends State<DiscoverTab>
           ),
           const SizedBox(height: 8),
           Text(
-            'Try expanding your distance or age range',
+            hasError ? errorText : 'Try expanding your distance or age range',
             style: TextStyle(
               fontSize: Responsive.font(context, 15),
               color: Colors.grey[500],
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(

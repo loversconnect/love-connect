@@ -394,15 +394,7 @@ class ProfileProvider extends ChangeNotifier {
   Future<List<String>> _resolvePhotoUrlsForBackend(
     List<String> photoPaths,
   ) async {
-    final auth = _auth;
-    if (auth == null) {
-      throw Exception('Not authenticated');
-    }
-    final ready = await auth.ensureBackendSession();
-    final token = auth.backendToken;
-    if (!ready || token == null || token.isEmpty) {
-      throw Exception('Backend session unavailable');
-    }
+    final token = await _requireBackendToken();
 
     final uploadedUrls = <String>[];
     for (final rawPath in photoPaths) {
@@ -427,11 +419,8 @@ class ProfileProvider extends ChangeNotifier {
     DateTime? birthDate,
     List<String>? photos,
   }) async {
-    final auth = _auth;
-    if (auth == null) return;
-    final ready = await auth.ensureBackendSession();
-    final token = auth.backendToken;
-    if (!ready || token == null || token.isEmpty) return;
+    final token = await _tryGetBackendToken();
+    if (token == null) return;
 
     await _backendApi.updateUserProfile(
       token: token,
@@ -440,5 +429,26 @@ class ProfileProvider extends ChangeNotifier {
       birthDateIso: birthDate?.toIso8601String(),
       photos: photos,
     );
+  }
+
+  Future<String?> _tryGetBackendToken() async {
+    final auth = _auth;
+    if (auth == null) return null;
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final ready = await auth.ensureBackendSession();
+      final token = auth.backendToken;
+      if (ready && token != null && token.isNotEmpty) {
+        return token;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+    }
+    return null;
+  }
+
+  Future<String> _requireBackendToken() async {
+    final token = await _tryGetBackendToken();
+    if (token != null) return token;
+    throw Exception('Backend session unavailable');
   }
 }
