@@ -6,6 +6,7 @@ import 'package:lerolove/providers/moderation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/chat_background_manager.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   const ChatDetailScreen({
@@ -13,11 +14,13 @@ class ChatDetailScreen extends StatefulWidget {
     required this.matchName,
     required this.matchId,
     this.peerUserId,
+    this.matchPhotoUrl,
   }) : super(key: key);
 
   final String matchName;
   final String matchId;
   final String? peerUserId;
+  final String? matchPhotoUrl;
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -202,12 +205,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: colorScheme.surfaceVariant,
-              child: Text(
-                widget.matchName[0],
-                style: TextStyle(
-                  fontSize: Responsive.font(context, 16),
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              child: ClipOval(
+                child: SizedBox.expand(
+                  child: PhotoImage(
+                    path: widget.matchPhotoUrl,
+                    placeholderIcon: Icons.person,
+                  ),
                 ),
               ),
             ),

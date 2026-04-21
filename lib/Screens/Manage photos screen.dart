@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:lerolove/providers/profile_provider.dart';
+import 'package:provider/provider.dart';
 
 class ManagePhotosScreen extends StatefulWidget {
   const ManagePhotosScreen({Key? key}) : super(key: key);
@@ -9,23 +13,42 @@ class ManagePhotosScreen extends StatefulWidget {
 }
 
 class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
-  // Demo: Start with some photos already added
-  final List<String?> _photos = [
-    'photo_0', // Main photo
-    'photo_1',
-    null,
-    'photo_3',
-    null,
-    null,
-  ];
+  final List<String?> _photos = List<String?>.filled(6, null);
+  final ImagePicker _picker = ImagePicker();
 
   bool _hasChanges = false;
 
-  void _addPhoto(int index) {
-    setState(() {
-      _photos[index] = 'photo_$index';
-      _hasChanges = true;
-    });
+  @override
+  void initState() {
+    super.initState();
+    final existingPhotos =
+        context.read<ProfileProvider>().currentProfile?.photoUrls ?? const [];
+    for (var i = 0; i < existingPhotos.length && i < _photos.length; i++) {
+      _photos[i] = existingPhotos[i];
+    }
+  }
+
+  Future<void> _addPhoto(int index) async {
+    try {
+      final selected = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (selected == null) return;
+
+      setState(() {
+        _photos[index] = selected.path;
+        _hasChanges = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open gallery. Please check permissions.'),
+        ),
+      );
+    }
   }
 
   void _removePhoto(int index) {
@@ -35,19 +58,18 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     });
   }
 
-  void _reorderPhotos(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
+  Future<void> _saveChanges() async {
+    final cleaned = _photos.whereType<String>().toList(growable: false);
+    final profileProvider = context.read<ProfileProvider>();
+    await profileProvider.updateProfile(photoUrls: cleaned);
+    if (!mounted) return;
+    if (profileProvider.error != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
+      return;
     }
-    setState(() {
-      final photo = _photos.removeAt(oldIndex);
-      _photos.insert(newIndex, photo);
-      _hasChanges = true;
-    });
-  }
 
-  void _saveChanges() {
-    // In real app: Upload to Firebase Storage
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Photos updated successfully'),
@@ -80,9 +102,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 Navigator.of(context).pop();
                 _removePhoto(index);
               },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),
             ),
           ],
@@ -95,6 +115,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final profileProvider = context.watch<ProfileProvider>();
     final photoCount = _photos.where((p) => p != null).length;
 
     return Scaffold(
@@ -113,10 +134,14 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
         actions: [
           if (_hasChanges)
             TextButton(
-              onPressed: _saveChanges,
-              child: const Text(
-                'Save',
-              ),
+              onPressed: profileProvider.isLoading ? null : _saveChanges,
+              child: profileProvider.isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
             ),
         ],
       ),
@@ -126,7 +151,6 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Info Card
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -162,7 +186,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Your first photo is your main profile photo. Drag to reorder. Long-press to delete.',
+                            'Your first photo is your main profile photo. Long-press any photo to remove it.',
                             style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onBackground.withOpacity(0.7),
                               height: 1.4,
@@ -176,7 +200,6 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Photo Count
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -220,7 +243,6 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Photo Grid
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -237,7 +259,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                   return GestureDetector(
                     onTap: () => hasPhoto ? null : _addPhoto(index),
                     onLongPress: () =>
-                    hasPhoto ? _showDeleteConfirmation(index) : null,
+                        hasPhoto ? _showDeleteConfirmation(index) : null,
                     child: Container(
                       decoration: BoxDecoration(
                         color: hasPhoto
@@ -253,105 +275,113 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                       ),
                       child: hasPhoto
                           ? Stack(
-                        children: [
-                          // Photo placeholder
-                          Center(
-                            child: Icon(
-                              Icons.photo,
-                              size: Responsive.icon(context, 48),
-                              color: colorScheme.primary.withOpacity(0.5),
-                            ),
-                          ),
-                          // Delete button
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFD64B6C),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.close,
-                                size: Responsive.icon(context, 16),
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          // Main photo badge
-                          if (index == 0)
-                            Positioned(
-                              bottom: 8,
-                              left: 8,
-                              right: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.7),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'Main Photo',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: Responsive.font(context, 10),
-                                    fontWeight: FontWeight.w600,
+                              children: [
+                                Positioned.fill(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: PhotoImage(
+                                      path: _photos[index],
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          // Photo number
-                          if (index > 0)
-                            Positioned(
-                              bottom: 8,
-                              left: 8,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.5),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  '${index + 1}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: Responsive.font(context, 11),
-                                    fontWeight: FontWeight.bold,
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: () => _showDeleteConfirmation(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFD64B6C),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: Responsive.icon(context, 16),
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
-                      )
+                                if (index == 0)
+                                  Positioned(
+                                    bottom: 8,
+                                    left: 8,
+                                    right: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Main Photo',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: Responsive.font(
+                                            context,
+                                            10,
+                                          ),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (index > 0)
+                                  Positioned(
+                                    bottom: 8,
+                                    left: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.5),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: Responsive.font(
+                                            context,
+                                            11,
+                                          ),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            )
                           : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.add_photo_alternate_outlined,
-                            size: Responsive.icon(context, 40),
-                            color: colorScheme.onSurface.withOpacity(0.4),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            index == 0 ? 'Add Main' : 'Add Photo',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onBackground.withOpacity(0.6),
-                              fontSize: Responsive.font(context, 12),
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  size: Responsive.icon(context, 40),
+                                  color: colorScheme.onSurface.withOpacity(0.4),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  index == 0 ? 'Add Main' : 'Add Photo',
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onBackground.withOpacity(
+                                      0.6,
+                                    ),
+                                    fontSize: Responsive.font(context, 12),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
                     ),
                   );
                 },
               ),
               const SizedBox(height: 24),
-              // Guidelines
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -385,7 +415,9 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                     const SizedBox(height: 12),
                     _buildGuideline('✓ Use clear, recent photos of yourself'),
                     _buildGuideline('✓ Show your face clearly'),
-                    _buildGuideline('✓ Include variety (close-up, full body, activities)'),
+                    _buildGuideline(
+                      '✓ Include variety (close-up, full body, activities)',
+                    ),
                     _buildGuideline('✗ No group photos as main photo'),
                     _buildGuideline('✗ No sunglasses covering your face'),
                     _buildGuideline('✗ No inappropriate or offensive content'),

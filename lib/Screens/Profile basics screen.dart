@@ -34,7 +34,11 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
   Future<void> _selectDate(BuildContext context) async {
     final colorScheme = Theme.of(context).colorScheme;
     final DateTime now = DateTime.now();
-    final DateTime eighteenYearsAgo = DateTime(now.year - 18, now.month, now.day);
+    final DateTime eighteenYearsAgo = DateTime(
+      now.year - 18,
+      now.month,
+      now.day,
+    );
 
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -43,9 +47,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
       lastDate: eighteenYearsAgo,
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: colorScheme,
-          ),
+          data: Theme.of(context).copyWith(colorScheme: colorScheme),
           child: child!,
         );
       },
@@ -72,9 +74,9 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
   Future<void> _continue() async {
     if (_isValid) {
       context.read<AppState>().setUserName(
-            firstNameValue: _firstNameController.text.trim(),
-            lastNameValue: _lastNameController.text.trim(),
-          );
+        firstNameValue: _firstNameController.text.trim(),
+        lastNameValue: _lastNameController.text.trim(),
+      );
       final age = _calculateAge(_selectedDate!);
       final auth = context.read<AuthProvider>();
       final profileProvider = context.read<ProfileProvider>();
@@ -85,13 +87,14 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
         age: age,
         gender: _selectedGender ?? 'Other',
         phoneNumber: auth.currentPhoneNumber ?? '',
+        birthDate: _selectedDate,
       );
       if (!mounted) return;
 
       if (profileProvider.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(profileProvider.error!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
         return;
       }
 
@@ -267,10 +270,13 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: (_isValid && !profileProvider.isLoading) ? _continue : null,
+                  onPressed: (_isValid && !profileProvider.isLoading)
+                      ? _continue
+                      : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _isValid ? colorScheme.primary : colorScheme.surfaceVariant,
+                    backgroundColor: _isValid
+                        ? colorScheme.primary
+                        : colorScheme.surfaceVariant,
                     foregroundColor: _isValid
                         ? colorScheme.onPrimary
                         : colorScheme.onSurface,
@@ -279,7 +285,9 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                       ? SizedBox(
                           width: Responsive.icon(context, 20),
                           height: Responsive.icon(context, 20),
-                          child: const CircularProgressIndicator(strokeWidth: 2),
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
                         )
                       : const Text('Continue'),
                 ),

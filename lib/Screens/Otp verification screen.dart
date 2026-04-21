@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
 
@@ -95,10 +97,15 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
       return;
     }
 
-    // Navigate straight to home, clearing navigation stack.
+    final profile = context.read<ProfileProvider>();
+    final nextScreen = profile.hasCompletedProfile
+        ? const MainAppScreen()
+        : const ProfileBasicsScreen();
+
+    // Navigate to profile setup first when profile is incomplete.
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const MainAppScreen()),
+      MaterialPageRoute(builder: (context) => nextScreen),
       (route) => false,
     );
   }

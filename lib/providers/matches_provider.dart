@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:lerolove/models/match_models.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/services/backend_api.dart';
+import 'package:lerolove/services/api_config.dart';
+import 'package:lerolove/services/push_service.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MatchesProvider extends ChangeNotifier {
@@ -12,6 +15,8 @@ class MatchesProvider extends ChangeNotifier {
 
   AuthProvider? _auth;
   Timer? _pollTimer;
+  io.Socket? _socket;
+  StreamSubscription<Map<String, dynamic>>? _pushSub;
   final Map<String, StreamController<List<ChatMessageModel>>> _messageStreams =
       {};
   final Map<String, List<ChatMessageModel>> _cachedMessages = {};
@@ -34,6 +39,10 @@ class MatchesProvider extends ChangeNotifier {
     if (!changed) return;
 
     _pollTimer?.cancel();
+    _socket?.dispose();
+    _socket = null;
+    _pushSub?.cancel();
+    _pushSub = null;
     for (final stream in _messageStreams.values) {
       stream.close();
     }
@@ -55,13 +64,98 @@ class MatchesProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       _startPolling();
+      _connectSocket();
+      _bindPushEvents();
     });
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _refreshAllHistories();
+    });
+  }
+
+  void _connectSocket() {
+    final token = _auth?.backendToken;
+    if (token == null || token.isEmpty) return;
+
+    _socket?.dispose();
+    _socket = null;
+
+    final wsBase = ApiConfig.baseUrl
+        .replaceFirst(RegExp(r'^https://'), 'wss://')
+        .replaceFirst(RegExp(r'^http://'), 'ws://');
+
+    final socket = io.io(
+      '$wsBase/ws',
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .enableReconnection()
+          .setAuth({'token': token})
+          .disableAutoConnect()
+          .build(),
+    );
+
+    socket.onConnect((_) {
+      for (final peerId in _matchPeerMap.values) {
+        socket.emit('chat.join', {'peerId': peerId});
+      }
+    });
+
+    socket.on('chat.message', (raw) {
+      if (raw is! Map) return;
+      final map = raw.map((k, v) => MapEntry(k.toString(), v));
+      _handleRealtimeMessage(map);
+    });
+
+    socket.on('chat.read', (raw) {
+      if (raw is! Map) return;
+      final map = raw.map((k, v) => MapEntry(k.toString(), v));
+      _handleRealtimeRead(map);
+    });
+
+    socket.on('match.created', (raw) async {
+      if (raw is! Map) return;
+      final map = raw.map((k, v) => MapEntry(k.toString(), v));
+      final matchId = (map['matchId'] ?? '').toString();
+      final otherUserId = (map['otherUserId'] ?? '').toString();
+      if (matchId.isEmpty || otherUserId.isEmpty) return;
+      await registerMatch(
+        matchId: matchId,
+        peerUserId: otherUserId,
+        peerName: (map['otherName'] ?? 'Match').toString(),
+      );
+    });
+
+    socket.connect();
+    _socket = socket;
+  }
+
+  void _bindPushEvents() {
+    _pushSub?.cancel();
+    _pushSub = PushService.instance.events.listen((event) {
+      final type = (event['type'] ?? '').toString();
+      if (type == 'chat.message') {
+        final chatId = (event['chatId'] ?? '').toString();
+        if (chatId.isNotEmpty) {
+          unawaited(_refreshHistory(chatId));
+        } else {
+          unawaited(_refreshAllHistories());
+        }
+      } else if (type == 'match.created') {
+        final matchId = (event['matchId'] ?? '').toString();
+        final otherUserId = (event['otherUserId'] ?? '').toString();
+        if (matchId.isNotEmpty && otherUserId.isNotEmpty) {
+          unawaited(
+            registerMatch(
+              matchId: matchId,
+              peerUserId: otherUserId,
+              peerName: 'Match',
+            ),
+          );
+        }
+      }
     });
   }
 
@@ -112,6 +206,7 @@ class MatchesProvider extends ChangeNotifier {
     required String matchId,
     required String peerUserId,
     required String peerName,
+    String? peerPhotoUrl,
   }) async {
     final me = _auth?.backendUserId;
     if (me == null) return;
@@ -126,6 +221,7 @@ class MatchesProvider extends ChangeNotifier {
       unreadCounts: {me: 0},
       isActive: true,
       peerName: peerName,
+      peerPhotoUrl: peerPhotoUrl,
     );
 
     if (existingIndex >= 0) {
@@ -138,6 +234,7 @@ class MatchesProvider extends ChangeNotifier {
     _matchPeerMap[matchId] = peerUserId;
     await _persistMatches();
     await _refreshHistory(matchId);
+    _socket?.emit('chat.join', {'peerId': peerUserId});
     notifyListeners();
   }
 
@@ -230,11 +327,12 @@ class MatchesProvider extends ChangeNotifier {
       receiverId: peerId,
       content: text.trim(),
     );
-    await _refreshHistory(matchId);
   }
 
   Future<void> markAsRead(String matchId) async {
     final me = _auth?.backendUserId;
+    final token = _auth?.backendToken;
+    final peerId = _matchPeerMap[matchId];
     if (me == null) return;
     _matches = _matches
         .map((m) {
@@ -246,6 +344,12 @@ class MatchesProvider extends ChangeNotifier {
         .toList(growable: false);
     await _persistMatches();
     notifyListeners();
+
+    if (token != null && peerId != null) {
+      try {
+        await _backendApi.markChatRead(token: token, receiverId: peerId);
+      } catch (_) {}
+    }
   }
 
   Future<void> unmatch(String matchId) async {
@@ -268,9 +372,89 @@ class MatchesProvider extends ChangeNotifier {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _socket?.dispose();
+    _pushSub?.cancel();
     for (final stream in _messageStreams.values) {
       stream.close();
     }
     super.dispose();
+  }
+
+  void _handleRealtimeMessage(Map<String, dynamic> payload) {
+    final chatId = (payload['chatId'] ?? '').toString();
+    final messageRaw = payload['message'];
+    if (chatId.isEmpty || messageRaw is! Map) return;
+
+    final messageMap = messageRaw.map((k, v) => MapEntry(k.toString(), v));
+    final message = ChatMessageModel(
+      id: (messageMap['id'] ?? '').toString(),
+      senderId: (messageMap['senderId'] ?? '').toString(),
+      text: (messageMap['content'] ?? '').toString(),
+      sentAt: DateTime.tryParse((messageMap['createdAt'] ?? '').toString()),
+      readAt: (messageMap['isRead'] == true)
+          ? DateTime.tryParse((messageMap['createdAt'] ?? '').toString())
+          : null,
+    );
+
+    final existing = [
+      ...(_cachedMessages[chatId] ?? const <ChatMessageModel>[]),
+    ];
+    final hasMessage = existing.any(
+      (m) => m.id == message.id && m.id.isNotEmpty,
+    );
+    if (!hasMessage) {
+      existing.add(message);
+      existing.sort(
+        (a, b) =>
+            (a.sentAt ?? DateTime(1970)).compareTo(b.sentAt ?? DateTime(1970)),
+      );
+      _cachedMessages[chatId] = existing;
+      _messageStreams[chatId]?.add(existing);
+    }
+
+    _matches = _matches
+        .map((m) {
+          if (m.id != chatId) return m;
+          return m.copyWith(
+            lastMessage: message.text,
+            lastMessageAt: message.sentAt ?? DateTime.now(),
+            lastSenderId: message.senderId,
+            isActive: true,
+          );
+        })
+        .toList(growable: false);
+
+    unawaited(_persistMatches());
+    notifyListeners();
+  }
+
+  void _handleRealtimeRead(Map<String, dynamic> payload) {
+    final chatId = (payload['chatId'] ?? '').toString();
+    if (chatId.isEmpty) return;
+    final me = _auth?.backendUserId;
+    if (me == null) return;
+
+    final list = _cachedMessages[chatId];
+    if (list == null || list.isEmpty) return;
+    final readAt =
+        DateTime.tryParse((payload['readAt'] ?? '').toString()) ??
+        DateTime.now();
+
+    final updated = list
+        .map((m) {
+          if (m.senderId != me || m.readAt != null) return m;
+          return ChatMessageModel(
+            id: m.id,
+            senderId: m.senderId,
+            text: m.text,
+            sentAt: m.sentAt,
+            readAt: readAt,
+          );
+        })
+        .toList(growable: false);
+
+    _cachedMessages[chatId] = updated;
+    _messageStreams[chatId]?.add(updated);
+    notifyListeners();
   }
 }

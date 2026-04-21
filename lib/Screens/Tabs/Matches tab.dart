@@ -3,6 +3,7 @@ import 'package:lerolove/Screens/Chat%20detail%20screen.dart';
 import 'package:lerolove/models/match_models.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:provider/provider.dart';
 
@@ -233,6 +234,7 @@ class _MatchesTabState extends State<MatchesTab> {
                 matchName: name,
                 matchId: match.id,
                 peerUserId: otherUserId,
+                matchPhotoUrl: match.peerPhotoUrl,
               ),
             ),
           );
@@ -256,12 +258,12 @@ class _MatchesTabState extends State<MatchesTab> {
                     backgroundColor: isDark
                         ? Colors.grey[700]
                         : Colors.grey[300],
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: TextStyle(
-                        fontSize: Responsive.font(context, 20),
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    child: ClipOval(
+                      child: SizedBox.expand(
+                        child: PhotoImage(
+                          path: match.peerPhotoUrl,
+                          placeholderIcon: Icons.person,
+                        ),
                       ),
                     ),
                   ),

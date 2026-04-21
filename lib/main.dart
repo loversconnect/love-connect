@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,10 +15,18 @@ import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/providers/moderation_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
+import 'package:lerolove/services/push_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await PushService.instance.initialize();
 
   // Set portrait orientation only
   SystemChrome.setPreferredOrientations([
@@ -49,7 +58,11 @@ Future<void> main() async {
             return provider;
           },
         ),
-        ChangeNotifierProxyProvider2<AuthProvider, ProfileProvider, DiscoveryProvider>(
+        ChangeNotifierProxyProvider2<
+          AuthProvider,
+          ProfileProvider,
+          DiscoveryProvider
+        >(
           create: (_) => DiscoveryProvider(),
           update: (_, auth, profile, discovery) {
             final provider = discovery ?? DiscoveryProvider();
@@ -73,11 +86,11 @@ Future<void> main() async {
             return provider;
           },
         ),
-        ChangeNotifierProxyProvider<ProfileProvider, AdminProvider>(
+        ChangeNotifierProxyProvider<AuthProvider, AdminProvider>(
           create: (_) => AdminProvider(),
-          update: (_, profile, admin) {
+          update: (_, auth, admin) {
             final provider = admin ?? AdminProvider();
-            provider.bind(profile);
+            provider.bind(auth);
             return provider;
           },
         ),

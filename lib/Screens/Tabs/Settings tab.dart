@@ -6,6 +6,7 @@ import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/Utils/app_state.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
 import 'package:lerolove/services/backend_api.dart';
 import '../Edit profile screen.dart';
@@ -56,10 +57,15 @@ class SettingsTab extends StatelessWidget {
                       backgroundColor: isDark
                           ? Colors.grey[700]
                           : Colors.grey[300],
-                      child: Icon(
-                        Icons.person,
-                        size: Responsive.icon(context, 40),
-                        color: Colors.white,
+                      child: ClipOval(
+                        child: SizedBox.expand(
+                          child: PhotoImage(
+                            path: profile?.photoUrls.isNotEmpty == true
+                                ? profile!.photoUrls.first
+                                : null,
+                            placeholderIcon: Icons.person,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -444,14 +450,43 @@ class SettingsTab extends StatelessWidget {
               ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Account deletion requested'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+              onPressed: () async {
+                final auth = context.read<AuthProvider>();
+                final api = BackendApi();
+                final ready = await auth.ensureBackendSession();
+                final token = auth.backendToken;
+                if (!context.mounted) return;
+                if (!ready || token == null || token.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Could not verify backend session.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  await api.deleteMyAccount(token: token);
+                  await auth.signOut();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const WelcomeScreen(),
+                    ),
+                    (route) => false,
+                  );
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to delete account. Try again.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),

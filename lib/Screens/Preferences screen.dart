@@ -20,7 +20,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   DiscoverSortMode _sortMode = DiscoverSortMode.nearby;
   bool _initialized = false;
 
-  final List<String> _interests = ['Male', 'Female', 'Everyone'];
+  final List<Map<String, String>> _interestOptions = const [
+    {'label': 'Male', 'value': 'MALE'},
+    {'label': 'Female', 'value': 'FEMALE'},
+    {'label': 'Everyone', 'value': 'Everyone'},
+  ];
 
   @override
   void didChangeDependencies() {
@@ -38,13 +42,13 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   Future<void> _startMatching() async {
     await context.read<DiscoveryProvider>().updateDiscoverySettings(
-          interestedInValue: _interestedIn,
-          ageRangeValue: _ageRange,
-          maxDistanceKmValue: _maxDistance,
-          showOnlineOnlyValue: _showOnlineOnly,
-          verifiedProfilesOnlyValue: _verifiedProfilesOnly,
-          discoverSortModeValue: _sortMode,
-        );
+      interestedInValue: _interestedIn,
+      ageRangeValue: _ageRange,
+      maxDistanceKmValue: _maxDistance,
+      showOnlineOnlyValue: _showOnlineOnly,
+      verifiedProfilesOnlyValue: _verifiedProfilesOnly,
+      discoverSortModeValue: _sortMode,
+    );
     if (!mounted) return;
 
     Navigator.pushAndRemoveUntil(
@@ -114,14 +118,16 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 12,
-                      children: _interests.map((interest) {
-                        final isSelected = _interestedIn == interest;
+                      children: _interestOptions.map((option) {
+                        final label = option['label']!;
+                        final value = option['value']!;
+                        final isSelected = _interestedIn == value;
                         return ChoiceChip(
-                          label: Text(interest),
+                          label: Text(label),
                           selected: isSelected,
                           onSelected: (_) {
                             setState(() {
-                              _interestedIn = interest;
+                              _interestedIn = value;
                             });
                           },
                           selectedColor: colorScheme.primary,
@@ -297,7 +303,9 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                             child: Text(
                               '~$estimated people match your nearby preferences',
                               style: textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onBackground.withOpacity(0.7),
+                                color: colorScheme.onBackground.withOpacity(
+                                  0.7,
+                                ),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),

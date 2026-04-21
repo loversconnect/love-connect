@@ -1,43 +1,52 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:lerolove/providers/profile_provider.dart';
+import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/services/backend_api.dart';
 
 class AdminProvider extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final BackendApi _api = BackendApi();
 
-  ProfileProvider? _profileProvider;
+  AuthProvider? _auth;
 
-  void bind(ProfileProvider profileProvider) {
-    _profileProvider = profileProvider;
+  void bind(AuthProvider auth) {
+    _auth = auth;
     notifyListeners();
   }
 
-  bool get isAdmin => _profileProvider?.currentProfile?.role == 'admin';
+  bool get hasSession {
+    final token = _auth?.backendToken;
+    return token != null && token.isNotEmpty;
+  }
 
-  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> loadOpenReports({
-    int limit = 50,
-  }) async {
-    if (!isAdmin) return const [];
-
-    final snapshot = await _firestore
-        .collection('reports')
-        .where('status', isEqualTo: 'open')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-
-    return snapshot.docs;
+  Future<List<dynamic>> loadOpenReports() async {
+    final token = _auth?.backendToken;
+    if (token == null || token.isEmpty) return const [];
+    return _api.adminReports(token: token, status: 'open');
   }
 
   Future<void> setReportStatus({
     required String reportId,
     required String status,
+    String? note,
   }) async {
-    if (!isAdmin) return;
+    final token = _auth?.backendToken;
+    if (token == null || token.isEmpty) return;
+    await _api.adminResolveReport(
+      token: token,
+      reportId: reportId,
+      status: status,
+      note: note,
+    );
+  }
 
-    await _firestore.collection('reports').doc(reportId).set({
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> banUser({required String userId, String? reason}) async {
+    final token = _auth?.backendToken;
+    if (token == null || token.isEmpty) return;
+    await _api.adminBanUser(token: token, userId: userId, reason: reason);
+  }
+
+  Future<void> unbanUser({required String userId}) async {
+    final token = _auth?.backendToken;
+    if (token == null || token.isEmpty) return;
+    await _api.adminUnbanUser(token: token, userId: userId);
   }
 }

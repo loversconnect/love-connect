@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lerolove/services/backend_api.dart';
+import 'package:lerolove/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -29,12 +30,16 @@ class AuthProvider extends ChangeNotifier {
 
   String? _backendToken;
   String? get backendToken => _backendToken;
+  String? _backendRefreshToken;
+  String? get backendRefreshToken => _backendRefreshToken;
 
   String? _backendUserId;
   String? get backendUserId => _backendUserId;
 
   bool _backendLoading = false;
   bool get backendLoading => _backendLoading;
+  bool _hasRestoredSession = false;
+  bool get hasRestoredSession => _hasRestoredSession;
 
   bool get isBackendAuthenticated =>
       _backendToken != null && _backendToken!.isNotEmpty;
@@ -79,6 +84,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   String _tokenKey(String uid) => 'backend_access_token_$uid';
+  String _refreshTokenKey(String uid) => 'backend_refresh_token_$uid';
   String _backendUserIdKey(String uid) => 'backend_user_id_$uid';
   String _backendEmailKey(String uid) => 'backend_email_$uid';
   String _backendPasswordKey(String uid) => 'backend_password_$uid';
@@ -106,15 +112,52 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _restoreLocalSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedUid = prefs.getString(_localUidKey);
-    if (savedUid == null || savedUid.isEmpty) return;
+  DateTime? _extractTokenExpiry(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final payload = parts[1];
+      final normalized = base64Url.normalize(payload);
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final json = jsonDecode(decoded) as Map<String, dynamic>;
+      final exp = json['exp'];
+      if (exp is int) {
+        return DateTime.fromMillisecondsSinceEpoch(exp * 1000, isUtc: true);
+      }
+      if (exp is String) {
+        final parsed = int.tryParse(exp);
+        if (parsed != null) {
+          return DateTime.fromMillisecondsSinceEpoch(
+            parsed * 1000,
+            isUtc: true,
+          );
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 
-    _localUid = savedUid;
-    _localPhoneNumber = prefs.getString(_localPhoneKey);
-    await ensureBackendSession();
-    _notifySafely();
+  bool _isTokenNearExpiry(String token) {
+    final exp = _extractTokenExpiry(token);
+    if (exp == null) return false;
+    return DateTime.now().toUtc().add(const Duration(minutes: 2)).isAfter(exp);
+  }
+
+  Future<void> _restoreLocalSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedUid = prefs.getString(_localUidKey);
+      if (savedUid != null && savedUid.isNotEmpty) {
+        _localUid = savedUid;
+        _localPhoneNumber = prefs.getString(_localPhoneKey);
+        await ensureBackendSession();
+      }
+    } finally {
+      _hasRestoredSession = true;
+      _notifySafely();
+    }
   }
 
   Future<bool> ensureBackendSession() async {
@@ -130,13 +173,49 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
 
       final savedToken = prefs.getString(_tokenKey(effectiveUid));
+      final savedRefreshToken = prefs.getString(_refreshTokenKey(effectiveUid));
       final savedBackendUserId = prefs.getString(
         _backendUserIdKey(effectiveUid),
       );
       if (savedToken != null && savedToken.isNotEmpty) {
         _backendToken = savedToken;
+        _backendRefreshToken = savedRefreshToken;
         _backendUserId =
             savedBackendUserId ?? _extractBackendUserIdFromToken(savedToken);
+        await PushService.instance.bindBackendSession(_backendToken!);
+
+        if (_isTokenNearExpiry(savedToken) &&
+            savedRefreshToken != null &&
+            savedRefreshToken.isNotEmpty) {
+          try {
+            final session = await _backendApi.refresh(
+              refreshToken: savedRefreshToken,
+            );
+            _backendToken = session.accessToken;
+            _backendRefreshToken = session.refreshToken;
+            _backendUserId =
+                _extractBackendUserIdFromToken(session.accessToken) ??
+                _backendUserId;
+            await prefs.setString(_tokenKey(effectiveUid), _backendToken!);
+            await prefs.setString(
+              _refreshTokenKey(effectiveUid),
+              _backendRefreshToken!,
+            );
+            if (_backendUserId != null) {
+              await prefs.setString(
+                _backendUserIdKey(effectiveUid),
+                _backendUserId!,
+              );
+            }
+            await PushService.instance.bindBackendSession(_backendToken!);
+          } catch (_) {
+            await prefs.remove(_tokenKey(effectiveUid));
+            await prefs.remove(_refreshTokenKey(effectiveUid));
+            _backendToken = null;
+            _backendRefreshToken = null;
+          }
+        }
+
         _setBackendLoading(false);
         return true;
       }
@@ -149,27 +228,38 @@ class AuthProvider extends ChangeNotifier {
           _fallbackPasswordForUid(effectiveUid);
 
       String token;
+      String refreshToken;
       try {
-        token = await _backendApi.login(email: email, password: password);
+        final session = await _backendApi.login(
+          email: email,
+          password: password,
+        );
+        token = session.accessToken;
+        refreshToken = session.refreshToken;
       } on ApiException catch (_) {
-        token = await _backendApi.register(
+        final session = await _backendApi.register(
           email: email,
           password: password,
           name: 'Lero User',
           gender: 'OTHER',
           birthDateIso: '1999-01-01',
         );
+        token = session.accessToken;
+        refreshToken = session.refreshToken;
       }
 
       _backendToken = token;
+      _backendRefreshToken = refreshToken;
       _backendUserId = _extractBackendUserIdFromToken(token);
 
       await prefs.setString(_tokenKey(effectiveUid), token);
+      await prefs.setString(_refreshTokenKey(effectiveUid), refreshToken);
       await prefs.setString(_backendEmailKey(effectiveUid), email);
       await prefs.setString(_backendPasswordKey(effectiveUid), password);
       if (_backendUserId != null) {
         await prefs.setString(_backendUserIdKey(effectiveUid), _backendUserId!);
       }
+      await PushService.instance.bindBackendSession(_backendToken!);
 
       _setBackendLoading(false);
       return true;
@@ -183,12 +273,14 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _clearBackendState({required bool clearPersisted}) async {
     final effectiveUid = uid;
     _backendToken = null;
+    _backendRefreshToken = null;
     _backendUserId = null;
 
     if (!clearPersisted || effectiveUid == null) return;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey(effectiveUid));
+    await prefs.remove(_refreshTokenKey(effectiveUid));
     await prefs.remove(_backendUserIdKey(effectiveUid));
   }
 
@@ -288,6 +380,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await PushService.instance.unbindBackendSession();
+
+    if (_backendRefreshToken != null && _backendRefreshToken!.isNotEmpty) {
+      try {
+        await _backendApi.logout(refreshToken: _backendRefreshToken!);
+      } catch (_) {}
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_localUidKey);
     await prefs.remove(_localPhoneKey);

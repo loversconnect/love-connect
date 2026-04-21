@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:lerolove/models/user_profile.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
@@ -63,7 +64,7 @@ class DiscoveryProvider extends ChangeNotifier {
     final prefs = _profileProvider?.currentProfile?.preferences;
     if (prefs == null) return;
 
-    interestedIn = prefs.interestedIn;
+    interestedIn = _normalizeInterestedIn(prefs.interestedIn);
     ageRange = RangeValues(prefs.minAge.toDouble(), prefs.maxAge.toDouble());
     maxDistanceKm = prefs.maxDistanceKm;
     showOnlineOnly = prefs.showOnlineOnly;
@@ -131,11 +132,24 @@ class DiscoveryProvider extends ChangeNotifier {
       }
 
       final me = _profileProvider?.currentProfile;
-      if (me?.latitude != null && me?.longitude != null) {
+      double? lat = me?.latitude;
+      double? lng = me?.longitude;
+      if (lat == null || lng == null) {
+        final current = await _resolveCurrentLocation();
+        if (current != null) {
+          lat = current.latitude;
+          lng = current.longitude;
+          await _profileProvider?.updateLocalLocation(
+            latitude: lat,
+            longitude: lng,
+          );
+        }
+      }
+      if (lat != null && lng != null) {
         await _backendApi.updateLocation(
           token: auth.backendToken!,
-          lat: me!.latitude!,
-          lng: me.longitude!,
+          lat: lat,
+          lng: lng,
         );
       }
 
@@ -322,7 +336,8 @@ class DiscoveryProvider extends ChangeNotifier {
       return false;
     }
     if (interestedInValue != 'Everyone' &&
-        profile.gender != interestedInValue) {
+        _normalizeGender(profile.gender) !=
+            _normalizeGender(interestedInValue)) {
       return false;
     }
     if (showOnlineOnlyValue && !profile.isOnline) {
@@ -377,6 +392,54 @@ class DiscoveryProvider extends ChangeNotifier {
   }
 
   double _degToRad(double degree) => degree * (math.pi / 180.0);
+
+  String _normalizeInterestedIn(String value) {
+    final upper = value.trim().toUpperCase();
+    switch (upper) {
+      case 'MALE':
+      case 'MEN':
+        return 'MALE';
+      case 'FEMALE':
+      case 'WOMEN':
+        return 'FEMALE';
+      case 'EVERYONE':
+      case 'ALL':
+      default:
+        return 'Everyone';
+    }
+  }
+
+  String _normalizeGender(String value) {
+    final upper = value.trim().toUpperCase();
+    if (upper == 'MALE' || upper == 'MEN') return 'MALE';
+    if (upper == 'FEMALE' || upper == 'WOMEN') return 'FEMALE';
+    if (upper == 'EVERYONE' || upper == 'ALL') return 'Everyone';
+    return upper;
+  }
+
+  Future<Position?> _resolveCurrentLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   static String buildMatchId(String a, String b) {
     final ids = [a, b]..sort();

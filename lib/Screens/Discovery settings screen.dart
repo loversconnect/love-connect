@@ -7,7 +7,8 @@ class DiscoverySettingsScreen extends StatefulWidget {
   const DiscoverySettingsScreen({Key? key}) : super(key: key);
 
   @override
-  State<DiscoverySettingsScreen> createState() => _DiscoverySettingsScreenState();
+  State<DiscoverySettingsScreen> createState() =>
+      _DiscoverySettingsScreenState();
 }
 
 class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
@@ -20,7 +21,11 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
   bool _hasChanges = false;
   bool _initialized = false;
 
-  final List<String> _interests = ['Male', 'Female', 'Everyone'];
+  final List<Map<String, String>> _interestOptions = const [
+    {'label': 'Male', 'value': 'MALE'},
+    {'label': 'Female', 'value': 'FEMALE'},
+    {'label': 'Everyone', 'value': 'Everyone'},
+  ];
 
   @override
   void didChangeDependencies() {
@@ -38,13 +43,13 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
 
   Future<void> _saveChanges() async {
     await context.read<DiscoveryProvider>().updateDiscoverySettings(
-          interestedInValue: _interestedIn,
-          ageRangeValue: _ageRange,
-          maxDistanceKmValue: _maxDistance,
-          showOnlineOnlyValue: _showOnlineOnly,
-          verifiedProfilesOnlyValue: _verifiedProfilesOnly,
-          discoverSortModeValue: _sortMode,
-        );
+      interestedInValue: _interestedIn,
+      ageRangeValue: _ageRange,
+      maxDistanceKmValue: _maxDistance,
+      showOnlineOnlyValue: _showOnlineOnly,
+      verifiedProfilesOnlyValue: _verifiedProfilesOnly,
+      discoverSortModeValue: _sortMode,
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -67,12 +72,12 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
 
   int _estimateLocalMatches() {
     return context.read<DiscoveryProvider>().estimateMatchesFor(
-          interestedInValue: _interestedIn,
-          ageRangeValue: _ageRange,
-          maxDistanceKmValue: _maxDistance,
-          showOnlineOnlyValue: _showOnlineOnly,
-          verifiedProfilesOnlyValue: _verifiedProfilesOnly,
-        );
+      interestedInValue: _interestedIn,
+      ageRangeValue: _ageRange,
+      maxDistanceKmValue: _maxDistance,
+      showOnlineOnlyValue: _showOnlineOnly,
+      verifiedProfilesOnlyValue: _verifiedProfilesOnly,
+    );
   }
 
   @override
@@ -147,14 +152,16 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               const SizedBox(height: 16),
               Wrap(
                 spacing: 12,
-                children: _interests.map((interest) {
-                  final isSelected = _interestedIn == interest;
+                children: _interestOptions.map((option) {
+                  final label = option['label']!;
+                  final value = option['value']!;
+                  final isSelected = _interestedIn == value;
                   return ChoiceChip(
-                    label: Text(interest),
+                    label: Text(label),
                     selected: isSelected,
                     onSelected: (_) {
                       setState(() {
-                        _interestedIn = interest;
+                        _interestedIn = value;
                       });
                       _markChanged();
                     },
@@ -187,7 +194,10 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
@@ -235,7 +245,10 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),

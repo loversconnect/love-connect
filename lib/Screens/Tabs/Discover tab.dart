@@ -4,6 +4,7 @@ import 'package:lerolove/Screens/Profile%20detail%20screen.dart';
 import 'package:lerolove/Screens/Discovery%20settings%20screen.dart';
 import 'package:lerolove/Screens/Chat%20detail%20screen.dart';
 import 'package:lerolove/models/user_profile.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -98,8 +99,18 @@ class _DiscoverTabState extends State<DiscoverTab>
             matchId: matchId,
             peerUserId: currentProfile.id,
             peerName: currentProfile.name,
+            peerPhotoUrl: currentProfile.photoUrls.isNotEmpty
+                ? currentProfile.photoUrls.first
+                : null,
           );
           _showMessagePrompt(currentProfile, matchId);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Like sent to ${currentProfile.name}'),
+              duration: const Duration(milliseconds: 1400),
+            ),
+          );
         }
       });
     } else {
@@ -119,6 +130,7 @@ class _DiscoverTabState extends State<DiscoverTab>
           distance: discovery.distanceFromCurrent(profile).round(),
           bio: profile.bio,
           isOnline: profile.isOnline,
+          photos: profile.photoUrls,
         ),
       ),
     );
@@ -158,14 +170,14 @@ class _DiscoverTabState extends State<DiscoverTab>
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Like Sent',
+                    "It's a Match!",
                     style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Start a conversation with ${profile.name}',
+                    'You and ${profile.name} liked each other. Start a conversation now?',
                     textAlign: TextAlign.center,
                     style: textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onBackground.withOpacity(0.7),
@@ -175,12 +187,14 @@ class _DiscoverTabState extends State<DiscoverTab>
                   CircleAvatar(
                     radius: 44,
                     backgroundColor: colorScheme.surfaceVariant,
-                    child: Text(
-                      profile.name[0],
-                      style: TextStyle(
-                        fontSize: Responsive.font(context, 24),
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
+                    child: ClipOval(
+                      child: SizedBox.expand(
+                        child: PhotoImage(
+                          path: profile.photoUrls.isNotEmpty
+                              ? profile.photoUrls.first
+                              : null,
+                          placeholderIcon: Icons.person,
+                        ),
                       ),
                     ),
                   ),
@@ -219,6 +233,9 @@ class _DiscoverTabState extends State<DiscoverTab>
                                   matchName: profile.name,
                                   matchId: matchId,
                                   peerUserId: profile.id,
+                                  matchPhotoUrl: profile.photoUrls.isNotEmpty
+                                      ? profile.photoUrls.first
+                                      : null,
                                 ),
                               ),
                             );
@@ -240,21 +257,6 @@ class _DiscoverTabState extends State<DiscoverTab>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildMatchAvatar(String initial) {
-    return CircleAvatar(
-      radius: 40,
-      backgroundColor: Colors.grey[300],
-      child: Text(
-        initial,
-        style: TextStyle(
-          fontSize: Responsive.font(context, 24),
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ),
     );
   }
 
@@ -549,12 +551,11 @@ class _DiscoverTabState extends State<DiscoverTab>
           children: [
             Container(
               color: colorScheme.surfaceVariant,
-              child: Center(
-                child: Icon(
-                  Icons.person,
-                  size: Responsive.icon(context, 120),
-                  color: colorScheme.onSurface.withOpacity(0.35),
-                ),
+              child: PhotoImage(
+                path: profile.photoUrls.isNotEmpty
+                    ? profile.photoUrls.first
+                    : null,
+                placeholderIcon: Icons.person,
               ),
             ),
             Positioned(

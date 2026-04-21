@@ -10,6 +10,7 @@ class MatchThread {
     required this.unreadCounts,
     required this.isActive,
     this.peerName,
+    this.peerPhotoUrl,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class MatchThread {
   final Map<String, int> unreadCounts;
   final bool isActive;
   final String? peerName;
+  final String? peerPhotoUrl;
 
   int unreadFor(String userId) => unreadCounts[userId] ?? 0;
 
@@ -42,6 +44,7 @@ class MatchThread {
       ),
       isActive: (data['isActive'] as bool?) ?? true,
       peerName: data['peerName'] as String?,
+      peerPhotoUrl: data['peerPhotoUrl'] as String?,
     );
   }
 
@@ -62,6 +65,7 @@ class MatchThread {
           ),
       isActive: (json['isActive'] as bool?) ?? true,
       peerName: json['peerName'] as String?,
+      peerPhotoUrl: json['peerPhotoUrl'] as String?,
     );
   }
 
@@ -75,6 +79,7 @@ class MatchThread {
       'unreadCounts': unreadCounts,
       'isActive': isActive,
       'peerName': peerName,
+      'peerPhotoUrl': peerPhotoUrl,
     };
   }
 
@@ -87,6 +92,7 @@ class MatchThread {
     Map<String, int>? unreadCounts,
     bool? isActive,
     String? peerName,
+    String? peerPhotoUrl,
   }) {
     return MatchThread(
       id: id ?? this.id,
@@ -97,6 +103,7 @@ class MatchThread {
       unreadCounts: unreadCounts ?? this.unreadCounts,
       isActive: isActive ?? this.isActive,
       peerName: peerName ?? this.peerName,
+      peerPhotoUrl: peerPhotoUrl ?? this.peerPhotoUrl,
     );
   }
 }

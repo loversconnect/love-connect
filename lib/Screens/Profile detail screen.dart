@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:lerolove/Utils/photo_image.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   final String name;
@@ -7,6 +8,7 @@ class ProfileDetailScreen extends StatefulWidget {
   final int distance;
   final String bio;
   final bool isOnline;
+  final List<String> photos;
 
   const ProfileDetailScreen({
     Key? key,
@@ -15,6 +17,7 @@ class ProfileDetailScreen extends StatefulWidget {
     required this.distance,
     required this.bio,
     this.isOnline = false,
+    this.photos = const <String>[],
   }) : super(key: key);
 
   @override
@@ -24,7 +27,7 @@ class ProfileDetailScreen extends StatefulWidget {
 class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   final PageController _pageController = PageController();
   int _currentPhotoIndex = 0;
-  final int _totalPhotos = 3; // Demo: 3 photos
+  int get _totalPhotos => widget.photos.isEmpty ? 1 : widget.photos.length;
 
   @override
   void dispose() {
@@ -58,7 +61,9 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 children: [
                   const Text('Why are you reporting this profile?'),
                   const SizedBox(height: 16),
-                  _buildReportOption('Inappropriate photos', selectedReason, (value) {
+                  _buildReportOption('Inappropriate photos', selectedReason, (
+                    value,
+                  ) {
                     setState(() => selectedReason = value);
                   }),
                   _buildReportOption('Harassment', selectedReason, (value) {
@@ -83,20 +88,20 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 TextButton(
                   onPressed: selectedReason != null
                       ? () {
-                    // In real app: Submit report to Firebase
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Report submitted. User has been blocked.'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    Navigator.pop(context); // Return to discovery
-                  }
+                          // In real app: Submit report to Firebase
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Report submitted. User has been blocked.',
+                              ),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                          Navigator.pop(context); // Return to discovery
+                        }
                       : null,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
                   child: const Text('Submit Report'),
                 ),
               ],
@@ -107,7 +112,11 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
     );
   }
 
-  Widget _buildReportOption(String reason, String? selectedReason, Function(String?) onChanged) {
+  Widget _buildReportOption(
+    String reason,
+    String? selectedReason,
+    Function(String?) onChanged,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     return RadioListTile<String>(
       title: Text(reason),
@@ -149,9 +158,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 );
                 Navigator.pop(context); // Return to discovery
               },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.red,
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Block'),
             ),
           ],
@@ -177,14 +184,14 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               });
             },
             itemBuilder: (context, index) {
+              final photoPath = widget.photos.isNotEmpty
+                  ? widget.photos[index]
+                  : null;
               return Container(
                 color: colorScheme.surfaceVariant,
-                child: Center(
-                  child: Icon(
-                    Icons.person,
-                    size: Responsive.icon(context, 120),
-                    color: colorScheme.onSurface.withOpacity(0.35),
-                  ),
+                child: PhotoImage(
+                  path: photoPath,
+                  placeholderIcon: Icons.person,
                 ),
               );
             },
@@ -200,10 +207,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.8),
-                  ],
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
                 ),
               ),
               child: SafeArea(
@@ -319,10 +323,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                           color: Colors.black.withOpacity(0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.more_vert,
-                          color: Colors.white,
-                        ),
+                        child: const Icon(Icons.more_vert, color: Colors.white),
                       ),
                       itemBuilder: (context) => [
                         PopupMenuItem(
@@ -366,7 +367,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: List.generate(_totalPhotos, (index) {
                     return Expanded(
