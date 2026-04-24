@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Profile%20detail%20screen.dart';
 import 'package:lerolove/Screens/Discovery%20settings%20screen.dart';
@@ -8,6 +12,7 @@ import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({Key? key}) : super(key: key);
@@ -23,6 +28,10 @@ class _DiscoverTabState extends State<DiscoverTab>
   AnimationController? _swipeController;
   Animation<double>? _swipeAnimation;
   bool _isAnimatingOut = false;
+  String? _actionChipLabel;
+  Timer? _actionChipTimer;
+  String? _lastPrecachedImage;
+  bool _locationHintShownThisRun = false;
 
   @override
   void initState() {
@@ -31,18 +40,45 @@ class _DiscoverTabState extends State<DiscoverTab>
       vsync: this,
       duration: const Duration(milliseconds: 220),
     );
+    _restoreHints();
   }
 
   @override
   void dispose() {
+    _actionChipTimer?.cancel();
     _swipeController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreHints() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool('discover_swipe_hint_seen') ?? false;
+    if (!mounted) return;
+    setState(() {
+      _showSwipeHint = !dismissed;
+    });
   }
 
   void _dismissSwipeHint() {
     if (!_showSwipeHint) return;
     setState(() {
       _showSwipeHint = false;
+    });
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setBool('discover_swipe_hint_seen', true),
+    );
+  }
+
+  void _showActionChip(String label) {
+    _actionChipTimer?.cancel();
+    setState(() {
+      _actionChipLabel = label;
+    });
+    _actionChipTimer = Timer(const Duration(milliseconds: 1450), () {
+      if (!mounted) return;
+      setState(() {
+        _actionChipLabel = null;
+      });
     });
   }
 
@@ -116,8 +152,20 @@ class _DiscoverTabState extends State<DiscoverTab>
             peerName: peerName,
             peerPhotoUrl: peerPhoto,
           );
+          _showActionChip('Updated');
           _showMessagePrompt(currentProfile, matchId);
         } else {
+          final errorText = discovery.error;
+          if (errorText != null && errorText.trim().isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorText),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+            return;
+          }
+          _showActionChip('Sent');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Like sent to ${currentProfile.name}'),
@@ -127,6 +175,7 @@ class _DiscoverTabState extends State<DiscoverTab>
         }
       });
     } else {
+      _showActionChip('Updated');
       discovery.passProfile(currentProfile.id);
     }
   }
@@ -140,7 +189,9 @@ class _DiscoverTabState extends State<DiscoverTab>
         builder: (context) => ProfileDetailScreen(
           name: profile.name,
           age: profile.age,
-          distance: discovery.distanceFromCurrent(profile).round(),
+          distance: discovery.isDistanceHidden(profile)
+              ? 0
+              : discovery.distanceFromCurrent(profile).round(),
           bio: profile.bio,
           isOnline: profile.isOnline,
           photos: profile.photoUrls,
@@ -273,11 +324,35 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 
+  Future<void> _openChatForProfile(UserProfile profile) async {
+    final match = context.read<MatchesProvider>().matchForPeer(profile.id);
+    if (match == null) return;
+
+    await context.read<MatchesProvider>().markAsRead(match.id);
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatDetailScreen(
+          matchName: match.peerName ?? profile.name,
+          matchId: match.id,
+          peerUserId: profile.id,
+          matchPhotoUrl:
+              match.peerPhotoUrl ??
+              (profile.photoUrls.isNotEmpty ? profile.photoUrls.first : null),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final discovery = context.watch<DiscoveryProvider>();
+    final matchesProvider = context.watch<MatchesProvider>();
     final profiles = discovery.discoverProfiles;
+    _precacheNextCardImage(profiles);
+    _maybeShowLocationHint(discovery.error);
 
     return Scaffold(
       appBar: AppBar(
@@ -300,201 +375,364 @@ class _DiscoverTabState extends State<DiscoverTab>
           ),
         ],
       ),
-      body: profiles.isEmpty
-          ? _buildEmptyState(discovery.error)
-          : Column(
-              children: [
-                _buildSortRow(discovery),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      if (profiles.length > 1)
-                        Positioned.fill(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: RepaintBoundary(
-                              child: _buildProfileCard(profiles[1], discovery),
-                            ),
-                          ),
-                        ),
-                      Positioned.fill(
-                        child: GestureDetector(
-                          onPanUpdate: (details) {
-                            _dismissSwipeHint();
-                            if (_isAnimatingOut) return;
-                            setState(() {
-                              _dragDistance += details.delta.dx;
-                            });
-                          },
-                          onPanEnd: (details) {
-                            if (_isAnimatingOut) return;
-                            final velocity =
-                                details.velocity.pixelsPerSecond.dx;
-                            final shouldSwipe =
-                                _dragDistance.abs() > 100 ||
-                                velocity.abs() > 800;
-                            final direction = _dragDistance >= 0 ? 1 : -1;
-
-                            if (shouldSwipe) {
-                              final screenWidth = MediaQuery.of(
-                                context,
-                              ).size.width;
-                              _animateSwipeTo(
-                                direction * (screenWidth + 120),
-                                onComplete: () => _onSwipe(direction > 0),
-                              );
-                            } else {
-                              _animateSwipeTo(0);
-                            }
-                          },
-                          child: Transform.translate(
-                            offset: Offset(_dragDistance, 0),
-                            child: Transform.rotate(
-                              angle: _dragDistance / 1000,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: RepaintBoundary(
-                                  child: _buildProfileCard(
-                                    profiles.first,
-                                    discovery,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 16,
-                        left: 0,
-                        right: 0,
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 300),
-                            opacity: _showSwipeHint ? 1 : 0,
-                            child: Center(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.surface.withOpacity(0.92),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: colorScheme.primary.withOpacity(0.2),
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.06),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.swipe,
-                                      size: Responsive.icon(context, 18),
-                                      color: colorScheme.primary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Swipe right to Like · left to Pass',
-                                      style: TextStyle(
-                                        fontSize: Responsive.font(context, 12),
-                                        fontWeight: FontWeight.w600,
-                                        color: colorScheme.onSurface,
+      body: RefreshIndicator(
+        onRefresh: () => context.read<DiscoveryProvider>().refreshProfiles(),
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              SizedBox(
+                height: constraints.maxHeight,
+                child: discovery.isLoading && profiles.isEmpty
+                    ? _buildDiscoverSkeleton()
+                    : profiles.isEmpty
+                    ? _buildEmptyState(discovery)
+                    : Column(
+                        children: [
+                          if (discovery.isOffline)
+                            _buildOfflineBanner(discovery.queuedActionsCount),
+                          _buildSortRow(discovery),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                if (profiles.length > 1)
+                                  Positioned.fill(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: RepaintBoundary(
+                                        child: _buildProfileCard(
+                                          profiles[1],
+                                          discovery,
+                                          matchesProvider,
+                                        ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (_dragDistance.abs() > 20)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: Center(
-                              child: Transform.rotate(
-                                angle: -0.2,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: _dragDistance > 0
-                                        ? colorScheme.primary.withOpacity(0.9)
-                                        : Colors.red.withValues(alpha: 0.9),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 3,
+                                Positioned.fill(
+                                  child: GestureDetector(
+                                    onPanUpdate: (details) {
+                                      _dismissSwipeHint();
+                                      if (_isAnimatingOut) return;
+                                      setState(() {
+                                        _dragDistance += details.delta.dx;
+                                      });
+                                    },
+                                    onPanEnd: (details) {
+                                      if (_isAnimatingOut) return;
+                                      final velocity =
+                                          details.velocity.pixelsPerSecond.dx;
+                                      final shouldSwipe =
+                                          _dragDistance.abs() > 100 ||
+                                          velocity.abs() > 800;
+                                      final direction = _dragDistance >= 0
+                                          ? 1
+                                          : -1;
+
+                                      if (shouldSwipe) {
+                                        final screenWidth = MediaQuery.of(
+                                          context,
+                                        ).size.width;
+                                        _animateSwipeTo(
+                                          direction * (screenWidth + 120),
+                                          onComplete: () =>
+                                              _onSwipe(direction > 0),
+                                        );
+                                      } else {
+                                        _animateSwipeTo(0);
+                                      }
+                                    },
+                                    child: Transform.translate(
+                                      offset: Offset(_dragDistance, 0),
+                                      child: Transform.rotate(
+                                        angle: _dragDistance / 1000,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: RepaintBoundary(
+                                            child: _buildProfileCard(
+                                              profiles.first,
+                                              discovery,
+                                              matchesProvider,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  child: Text(
-                                    _dragDistance > 0 ? 'LIKE' : 'NOPE',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: Responsive.font(context, 32),
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2,
+                                ),
+                                Positioned(
+                                  top: 16,
+                                  left: 0,
+                                  right: 0,
+                                  child: IgnorePointer(
+                                    child: AnimatedOpacity(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      opacity: _showSwipeHint ? 1 : 0,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.surface
+                                                .withOpacity(0.92),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            border: Border.all(
+                                              color: colorScheme.primary
+                                                  .withOpacity(0.2),
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(
+                                                  0.06,
+                                                ),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 6),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.swipe,
+                                                size: Responsive.icon(
+                                                  context,
+                                                  18,
+                                                ),
+                                                color: colorScheme.primary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Swipe right to Like · left to Pass',
+                                                style: TextStyle(
+                                                  fontSize: Responsive.font(
+                                                    context,
+                                                    12,
+                                                  ),
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colorScheme.onSurface,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        bottom: 40,
-                        left: 0,
-                        right: 0,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                _buildActionButton(
-                                  icon: Icons.close,
-                                  color: Colors.red,
-                                  onTap: () => _onSwipe(false),
-                                  size: Responsive.icon(context, 60),
-                                  label: 'Pass',
-                                ),
-                                const SizedBox(width: 40),
-                                _buildActionButton(
-                                  icon: Icons.favorite,
-                                  color: colorScheme.primary,
-                                  onTap: () => _onSwipe(true),
-                                  size: Responsive.icon(context, 70),
-                                  label: 'Like',
+                                if (_dragDistance.abs() > 20)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: Center(
+                                        child: Transform.rotate(
+                                          angle: -0.2,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 24,
+                                              vertical: 12,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _dragDistance > 0
+                                                  ? colorScheme.primary
+                                                        .withOpacity(0.9)
+                                                  : Colors.red.withValues(
+                                                      alpha: 0.9,
+                                                    ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.white,
+                                                width: 3,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              _dragDistance > 0
+                                                  ? 'LIKE'
+                                                  : 'NOPE',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: Responsive.font(
+                                                  context,
+                                                  32,
+                                                ),
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 2,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Positioned(
+                                  bottom: 40,
+                                  left: 0,
+                                  right: 0,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_actionChipLabel != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          child: _buildActionChip(
+                                            _actionChipLabel!,
+                                          ),
+                                        ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          _buildActionButton(
+                                            icon: Icons.close,
+                                            color: Colors.red,
+                                            onTap: () => _onSwipe(false),
+                                            size: Responsive.icon(context, 60),
+                                            label: 'Pass',
+                                          ),
+                                          const SizedBox(width: 40),
+                                          matchesProvider.hasActiveMatchWith(
+                                                profiles.first.id,
+                                              )
+                                              ? _buildActionButton(
+                                                  icon: Icons.chat_bubble,
+                                                  color: colorScheme.primary,
+                                                  onTap: () =>
+                                                      _openChatForProfile(
+                                                        profiles.first,
+                                                      ),
+                                                  size: Responsive.icon(
+                                                    context,
+                                                    70,
+                                                  ),
+                                                  label: 'Message',
+                                                )
+                                              : _buildActionButton(
+                                                  icon: Icons.favorite,
+                                                  color: colorScheme.primary,
+                                                  onTap: () => _onSwipe(true),
+                                                  size: Responsive.icon(
+                                                    context,
+                                                    70,
+                                                  ),
+                                                  label: 'Like',
+                                                ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Tap or swipe',
+                                        style: TextStyle(
+                                          fontSize: Responsive.font(
+                                            context,
+                                            12,
+                                          ),
+                                          color: colorScheme.onSurface
+                                              .withOpacity(0.6),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap or swipe',
-                              style: TextStyle(
-                                fontSize: Responsive.font(context, 12),
-                                color: colorScheme.onSurface.withOpacity(0.6),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _precacheNextCardImage(List<UserProfile> profiles) {
+    if (!mounted || profiles.length < 2) return;
+    final path = profiles[1].photoUrls.isNotEmpty
+        ? profiles[1].photoUrls.first
+        : '';
+    if (path.isEmpty || path == _lastPrecachedImage) return;
+    _lastPrecachedImage = path;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        precacheImage(NetworkImage(path), context);
+        return;
+      }
+      if (!kIsWeb) {
+        precacheImage(FileImage(File(path)), context);
+      }
+    });
+  }
+
+  Future<void> _maybeShowLocationHint(String? errorText) async {
+    if (_locationHintShownThisRun) return;
+    if (errorText == null || !errorText.toLowerCase().contains('location')) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final shown = prefs.getBool('hint_location_required_shown') ?? false;
+    if (shown || !mounted) return;
+    _locationHintShownThisRun = true;
+    await prefs.setBool('hint_location_required_shown', true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Turn on location so nearby people can find you.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget _buildActionChip(String text) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.w700,
+          fontSize: Responsive.font(context, 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner(int queuedCount) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final queuedText = queuedCount > 0
+        ? 'We queued $queuedCount action${queuedCount == 1 ? '' : 's'}.'
+        : 'We will sync when back online.';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        'You are offline. $queuedText',
+        style: TextStyle(
+          color: colorScheme.onErrorContainer,
+          fontWeight: FontWeight.w600,
+          fontSize: Responsive.font(context, 12),
+        ),
+      ),
     );
   }
 
@@ -507,6 +745,8 @@ class _DiscoverTabState extends State<DiscoverTab>
           ChoiceChip(
             label: const Text('Nearby First'),
             selected: discovery.discoverSortMode == DiscoverSortMode.nearby,
+            showCheckmark: true,
+            checkmarkColor: colorScheme.onPrimary,
             onSelected: (_) => discovery.updateDiscoverySettings(
               interestedInValue: discovery.interestedIn,
               ageRangeValue: discovery.ageRange,
@@ -520,6 +760,8 @@ class _DiscoverTabState extends State<DiscoverTab>
           ChoiceChip(
             label: const Text('Best Relation'),
             selected: discovery.discoverSortMode == DiscoverSortMode.bestMatch,
+            showCheckmark: true,
+            checkmarkColor: colorScheme.onPrimary,
             onSelected: (_) => discovery.updateDiscoverySettings(
               interestedInValue: discovery.interestedIn,
               ageRangeValue: discovery.ageRange,
@@ -530,23 +772,42 @@ class _DiscoverTabState extends State<DiscoverTab>
             ),
           ),
           const Spacer(),
-          Text(
-            '${discovery.estimatedMatches} nearby',
-            style: TextStyle(
-              fontSize: Responsive.font(context, 13),
-              fontWeight: FontWeight.w600,
-              color: colorScheme.primary,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${discovery.estimatedMatches} nearby',
+                style: TextStyle(
+                  fontSize: Responsive.font(context, 13),
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.primary,
+                ),
+              ),
+              if (discovery.syncLabel() != null)
+                Text(
+                  discovery.syncLabel()!,
+                  style: TextStyle(
+                    fontSize: Responsive.font(context, 11),
+                    color: colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProfileCard(UserProfile profile, DiscoveryProvider discovery) {
+  Widget _buildProfileCard(
+    UserProfile profile,
+    DiscoveryProvider discovery,
+    MatchesProvider matchesProvider,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final score = discovery.compatibilityScore(profile);
+    final hiddenDistance = discovery.isDistanceHidden(profile);
     final distance = discovery.distanceFromCurrent(profile).round();
+    final existingMatch = matchesProvider.matchForPeer(profile.id);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
@@ -574,23 +835,71 @@ class _DiscoverTabState extends State<DiscoverTab>
             Positioned(
               top: 16,
               left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.92),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  '$score% relation',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: Responsive.font(context, 12),
-                    fontWeight: FontWeight.w700,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '$score% relation',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: Responsive.font(context, 12),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
+                  if (existingMatch != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.favorite,
+                            color: colorScheme.primary,
+                            size: Responsive.icon(context, 14),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Matched',
+                            style: TextStyle(
+                              color: colorScheme.primary,
+                              fontSize: Responsive.font(context, 12),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _buildDiscoverReasons(
+                      profile,
+                      discovery,
+                      hiddenDistance,
+                      distance,
+                    ),
+                  ),
+                ],
               ),
             ),
             Positioned(
@@ -657,7 +966,9 @@ class _DiscoverTabState extends State<DiscoverTab>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '$distance km away',
+                          hiddenDistance
+                              ? 'Distance hidden'
+                              : '$distance km away',
                           style: TextStyle(
                             fontSize: Responsive.font(context, 15),
                             color: Colors.white70,
@@ -720,26 +1031,49 @@ class _DiscoverTabState extends State<DiscoverTab>
             Positioned(
               top: 16,
               right: 16,
-              child: GestureDetector(
-                onTap: () => _openProfileDetail(profile),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 8,
+              child: Column(
+                children: [
+                  if (existingMatch != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: FilledButton.icon(
+                        onPressed: () => _openChatForProfile(profile),
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        label: const Text('Message'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          backgroundColor: colorScheme.primary.withValues(
+                            alpha: 0.95,
+                          ),
+                          foregroundColor: colorScheme.onPrimary,
+                        ),
                       ),
-                    ],
+                    ),
+                  GestureDetector(
+                    onTap: () => _openProfileDetail(profile),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.info_outline,
+                        color: colorScheme.primary,
+                        size: Responsive.icon(context, 20),
+                      ),
+                    ),
                   ),
-                  child: Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: Responsive.icon(context, 20),
-                  ),
-                ),
+                ],
               ),
             ),
           ],
@@ -794,20 +1128,33 @@ class _DiscoverTabState extends State<DiscoverTab>
     );
   }
 
-  Widget _buildEmptyState(String? errorText) {
+  Widget _buildEmptyState(DiscoveryProvider discovery) {
+    final errorText = discovery.error;
     final hasError = errorText != null && errorText.trim().isNotEmpty;
+    final filteredOutBySettings =
+        !hasError &&
+        discovery.hasBackendCandidates &&
+        discovery.estimatedMatches == 0;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            hasError ? Icons.location_off_outlined : Icons.inbox_outlined,
+            hasError
+                ? Icons.location_off_outlined
+                : filteredOutBySettings
+                ? Icons.filter_alt_off_outlined
+                : Icons.inbox_outlined,
             size: Responsive.icon(context, 80),
             color: Colors.grey[400],
           ),
           const SizedBox(height: 16),
           Text(
-            hasError ? 'Discovery Needs Location' : 'No more nearby profiles',
+            hasError
+                ? 'Discovery Needs Location'
+                : filteredOutBySettings
+                ? 'Filters are hiding nearby people'
+                : 'No more nearby profiles',
             style: TextStyle(
               fontSize: Responsive.font(context, 20),
               fontWeight: FontWeight.w600,
@@ -816,7 +1163,11 @@ class _DiscoverTabState extends State<DiscoverTab>
           ),
           const SizedBox(height: 8),
           Text(
-            hasError ? errorText : 'Try expanding your distance or age range',
+            hasError
+                ? errorText
+                : filteredOutBySettings
+                ? 'We found nearby profiles, but your current age, distance, or interest filters are excluding them.'
+                : 'Try expanding your distance or age range',
             style: TextStyle(
               fontSize: Responsive.font(context, 15),
               color: Colors.grey[500],
@@ -826,14 +1177,157 @@ class _DiscoverTabState extends State<DiscoverTab>
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () =>
-                context.read<DiscoveryProvider>().resetDiscoverQueue(),
+                context.read<DiscoveryProvider>().refreshProfiles(),
             icon: const Icon(Icons.refresh),
             label: const Text('Reload Nearby'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
+          if (filteredOutBySettings) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context
+                  .read<DiscoveryProvider>()
+                  .resetFiltersToBroadDefaults(),
+              icon: const Icon(Icons.tune),
+              label: const Text('Expand Filters'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  List<Widget> _buildDiscoverReasons(
+    UserProfile profile,
+    DiscoveryProvider discovery,
+    bool hiddenDistance,
+    int distance,
+  ) {
+    final List<String> reasons = <String>[];
+    final sharedInterests = discovery.sharedInterestCount(profile);
+    if (sharedInterests > 0) {
+      reasons.add('$sharedInterests shared interests');
+    }
+    if (!hiddenDistance && distance <= 10) {
+      reasons.add('Near you');
+    }
+    if (profile.isOnline) {
+      reasons.add('Recently active');
+    }
+    if (reasons.isEmpty) {
+      reasons.add('Within your filters');
+    }
+    return reasons
+        .take(2)
+        .map(
+          (reason) => Builder(
+            builder: (context) {
+              final colorScheme = Theme.of(context).colorScheme;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  reason,
+                  style: TextStyle(
+                    color: colorScheme.onPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: Responsive.font(context, 11),
+                  ),
+                ),
+              );
+            },
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Widget _buildDiscoverSkeleton() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _skeletonBar(width: 170, height: 36, color: colorScheme),
+          const SizedBox(height: 14),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 16,
+                    top: 16,
+                    child: _skeletonBar(
+                      width: 110,
+                      height: 28,
+                      color: colorScheme,
+                    ),
+                  ),
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 24,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _skeletonBar(
+                          width: 140,
+                          height: 22,
+                          color: colorScheme,
+                        ),
+                        const SizedBox(height: 8),
+                        _skeletonBar(
+                          width: 180,
+                          height: 14,
+                          color: colorScheme,
+                        ),
+                        const SizedBox(height: 8),
+                        _skeletonBar(
+                          width: 220,
+                          height: 14,
+                          color: colorScheme,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _skeletonBar({
+    required double width,
+    required double height,
+    required ColorScheme color,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color.surfaceContainerHighest.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(10),
       ),
     );
   }

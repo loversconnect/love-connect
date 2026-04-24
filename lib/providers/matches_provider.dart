@@ -21,6 +21,11 @@ class MatchesProvider extends ChangeNotifier {
       {};
   final Map<String, List<ChatMessageModel>> _cachedMessages = {};
   final Map<String, String> _matchPeerMap = {};
+  final Set<String> _loadedHistories = <String>{};
+  final Map<String, bool> _typingByMatchId = <String, bool>{};
+  final Map<String, Timer> _typingDebounceTimers = <String, Timer>{};
+  final List<_QueuedMessage> _queuedMessages = <_QueuedMessage>[];
+  Timer? _retryTimer;
 
   List<MatchThread> _matches = const [];
   List<MatchThread> get matches =>
@@ -28,6 +33,36 @@ class MatchesProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  bool _isOffline = false;
+  DateTime? _lastSyncedAt;
+  DateTime? _lastHistorySyncedAt;
+
+  bool get isOffline => _isOffline;
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+  DateTime? get lastHistorySyncedAt => _lastHistorySyncedAt;
+  int get queuedMessagesCount => _queuedMessages.length;
+  bool isPeerTyping(String matchId) => _typingByMatchId[matchId] == true;
+
+  MatchThread? matchForPeer(String peerUserId) {
+    for (final match in matches) {
+      final peer = _matchPeerMap[match.id];
+      if (peer == peerUserId) return match;
+    }
+    return null;
+  }
+
+  bool hasActiveMatchWith(String peerUserId) =>
+      matchForPeer(peerUserId) != null;
+
+  MatchThread? matchById(String matchId) {
+    for (final match in _matches) {
+      if (match.id == matchId) return match;
+    }
+    return null;
+  }
+
+  bool hasLoadedConversation(String matchId) =>
+      _loadedHistories.contains(matchId);
 
   String _storageKey(String backendUserId) => 'backend_matches_$backendUserId';
 
@@ -49,6 +84,15 @@ class MatchesProvider extends ChangeNotifier {
     _messageStreams.clear();
     _cachedMessages.clear();
     _matchPeerMap.clear();
+    _loadedHistories.clear();
+    _typingByMatchId.clear();
+    for (final timer in _typingDebounceTimers.values) {
+      timer.cancel();
+    }
+    _typingDebounceTimers.clear();
+    _queuedMessages.clear();
+    _retryTimer?.cancel();
+    _retryTimer = null;
     _matches = const [];
 
     if (!auth.isBackendAuthenticated || auth.backendUserId == null) {
@@ -73,8 +117,21 @@ class MatchesProvider extends ChangeNotifier {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _refreshAllHistories();
+      unawaited(_syncBackendMatches());
+      unawaited(_refreshAllHistories());
+      unawaited(_retryQueuedMessages());
     });
+  }
+
+  Future<void> refreshNow() async {
+    await _syncBackendMatches();
+    await _refreshAllHistories();
+    notifyListeners();
+  }
+
+  Future<void> refreshConversation(String matchId) async {
+    await _refreshHistory(matchId);
+    notifyListeners();
   }
 
   void _connectSocket() {
@@ -129,6 +186,12 @@ class MatchesProvider extends ChangeNotifier {
       );
     });
 
+    socket.on('chat.typing', (raw) {
+      if (raw is! Map) return;
+      final map = raw.map((k, v) => MapEntry(k.toString(), v));
+      _handleRealtimeTyping(map);
+    });
+
     socket.connect();
     _socket = socket;
   }
@@ -179,6 +242,7 @@ class MatchesProvider extends ChangeNotifier {
         final peer = _otherUserId(match);
         if (peer != null) _matchPeerMap[match.id] = peer;
       }
+      _lastSyncedAt = DateTime.now();
     } catch (_) {
       _matches = const [];
     }
@@ -186,7 +250,7 @@ class MatchesProvider extends ChangeNotifier {
 
   Future<void> _syncBackendMatches() async {
     final auth = _auth;
-    final token = auth?.backendToken;
+    final token = await _resolveToken();
     final me = auth?.backendUserId;
     if (token == null || token.isEmpty || me == null) return;
 
@@ -228,10 +292,12 @@ class MatchesProvider extends ChangeNotifier {
       if (changed) {
         _matches = copy;
         await _persistMatches();
-        notifyListeners();
       }
+      _isOffline = false;
+      _lastSyncedAt = DateTime.now();
+      notifyListeners();
     } catch (_) {
-      // Keep local/persisted matches if network sync fails.
+      _isOffline = true;
     }
   }
 
@@ -309,9 +375,17 @@ class MatchesProvider extends ChangeNotifier {
 
   Future<void> _refreshHistory(String matchId) async {
     final auth = _auth;
-    final token = auth?.backendToken;
-    final peerId = _matchPeerMap[matchId];
-    if (auth == null || token == null || peerId == null) return;
+    final token = await _resolveToken();
+    final peerId = _matchPeerMap[matchId] ?? _derivePeerId(matchId);
+    if (auth == null || token == null || peerId == null) {
+      final cached = _cachedMessages[matchId] ?? const <ChatMessageModel>[];
+      if (cached.isNotEmpty) {
+        _loadedHistories.add(matchId);
+        _messageStreams[matchId]?.add(cached);
+        notifyListeners();
+      }
+      return;
+    }
 
     try {
       final history = await _backendApi.history(
@@ -339,7 +413,10 @@ class MatchesProvider extends ChangeNotifier {
             );
 
       _cachedMessages[matchId] = messages;
+      _loadedHistories.add(matchId);
       _messageStreams[matchId]?.add(messages);
+      _isOffline = false;
+      _lastHistorySyncedAt = DateTime.now();
 
       if (messages.isNotEmpty) {
         final last = messages.last;
@@ -357,7 +434,77 @@ class MatchesProvider extends ChangeNotifier {
         await _persistMatches();
       }
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      _isOffline = true;
+      final cached = _cachedMessages[matchId] ?? const <ChatMessageModel>[];
+      if (cached.isNotEmpty) {
+        _loadedHistories.add(matchId);
+        _messageStreams[matchId]?.add(cached);
+      }
+      notifyListeners();
+    }
+  }
+
+  String _pushLocalOutgoingMessage({
+    required String matchId,
+    required String senderId,
+    required String text,
+  }) {
+    final now = DateTime.now();
+    final localId = 'local_${now.microsecondsSinceEpoch}';
+    final optimistic = ChatMessageModel(
+      id: localId,
+      senderId: senderId,
+      text: text,
+      sentAt: now,
+      readAt: null,
+      isPending: true,
+      isFailed: false,
+    );
+
+    final existing = [
+      ...(_cachedMessages[matchId] ?? const <ChatMessageModel>[]),
+    ];
+    existing.add(optimistic);
+    existing.sort(
+      (a, b) =>
+          (a.sentAt ?? DateTime(1970)).compareTo(b.sentAt ?? DateTime(1970)),
+    );
+
+    _cachedMessages[matchId] = existing;
+    _messageStreams[matchId]?.add(existing);
+    _matches = _matches
+        .map((m) {
+          if (m.id != matchId) return m;
+          return m.copyWith(
+            lastMessage: text,
+            lastMessageAt: now,
+            lastSenderId: senderId,
+            isActive: true,
+          );
+        })
+        .toList(growable: false);
+    notifyListeners();
+    unawaited(_persistMatches());
+    return localId;
+  }
+
+  void _markLocalMessageFailed({
+    required String matchId,
+    required String localId,
+  }) {
+    final existing = [
+      ...(_cachedMessages[matchId] ?? const <ChatMessageModel>[]),
+    ];
+    final index = existing.indexWhere((m) => m.id == localId);
+    if (index < 0) return;
+    existing[index] = existing[index].copyWith(
+      isPending: false,
+      isFailed: true,
+    );
+    _cachedMessages[matchId] = existing;
+    _messageStreams[matchId]?.add(existing);
+    notifyListeners();
   }
 
   Future<void> sendMessage({
@@ -365,20 +512,58 @@ class MatchesProvider extends ChangeNotifier {
     required String text,
   }) async {
     final auth = _auth;
-    final token = auth?.backendToken;
-    final peerId = _matchPeerMap[matchId];
+    final token = await _resolveToken();
+    final me = auth?.backendUserId;
+    final peerId = _matchPeerMap[matchId] ?? _derivePeerId(matchId);
     if (auth == null ||
         token == null ||
+        me == null ||
         peerId == null ||
         text.trim().isEmpty) {
       return;
     }
 
-    await _backendApi.sendMessage(
-      token: token,
-      receiverId: peerId,
-      content: text.trim(),
+    final content = text.trim();
+    final localId = _pushLocalOutgoingMessage(
+      matchId: matchId,
+      senderId: me,
+      text: content,
     );
+
+    try {
+      await _backendApi.sendMessage(
+        token: token,
+        receiverId: peerId,
+        content: content,
+      );
+      _isOffline = false;
+      await _refreshHistory(matchId);
+    } catch (_) {
+      _markLocalMessageFailed(matchId: matchId, localId: localId);
+      if (_queuedMessages.every((item) => item.localId != localId)) {
+        _queuedMessages.add(
+          _QueuedMessage(matchId: matchId, text: content, localId: localId),
+        );
+      }
+      _isOffline = true;
+      _startRetryTimer();
+      rethrow;
+    }
+  }
+
+  Future<void> retryMessage({
+    required String matchId,
+    required ChatMessageModel message,
+  }) async {
+    final existing = [
+      ...(_cachedMessages[matchId] ?? const <ChatMessageModel>[]),
+    ];
+    _cachedMessages[matchId] = existing
+        .where((m) => m.id != message.id)
+        .toList(growable: false);
+    _messageStreams[matchId]?.add(_cachedMessages[matchId] ?? const []);
+    notifyListeners();
+    await sendMessage(matchId: matchId, text: message.text);
   }
 
   Future<void> markAsRead(String matchId) async {
@@ -424,8 +609,12 @@ class MatchesProvider extends ChangeNotifier {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _retryTimer?.cancel();
     _socket?.dispose();
     _pushSub?.cancel();
+    for (final timer in _typingDebounceTimers.values) {
+      timer.cancel();
+    }
     for (final stream in _messageStreams.values) {
       stream.close();
     }
@@ -436,6 +625,8 @@ class MatchesProvider extends ChangeNotifier {
     final chatId = (payload['chatId'] ?? '').toString();
     final messageRaw = payload['message'];
     if (chatId.isEmpty || messageRaw is! Map) return;
+    final me = _auth?.backendUserId;
+    if (me == null) return;
 
     final messageMap = messageRaw.map((k, v) => MapEntry(k.toString(), v));
     final message = ChatMessageModel(
@@ -446,7 +637,14 @@ class MatchesProvider extends ChangeNotifier {
       readAt: (messageMap['isRead'] == true)
           ? DateTime.tryParse((messageMap['createdAt'] ?? '').toString())
           : null,
+      isPending: false,
+      isFailed: false,
     );
+
+    if (_matches.every((m) => m.id != chatId)) {
+      // Recover gracefully when a realtime message arrives before local match sync.
+      unawaited(_syncBackendMatches().then((_) => _refreshHistory(chatId)));
+    }
 
     final existing = [
       ...(_cachedMessages[chatId] ?? const <ChatMessageModel>[]),
@@ -467,16 +665,26 @@ class MatchesProvider extends ChangeNotifier {
     _matches = _matches
         .map((m) {
           if (m.id != chatId) return m;
+          final unread = Map<String, int>.from(m.unreadCounts);
+          final isIncoming =
+              message.senderId.isNotEmpty && message.senderId != me;
+          if (isIncoming) {
+            unread[me] = (unread[me] ?? 0) + 1;
+          }
           return m.copyWith(
             lastMessage: message.text,
             lastMessageAt: message.sentAt ?? DateTime.now(),
             lastSenderId: message.senderId,
+            unreadCounts: unread,
             isActive: true,
           );
         })
         .toList(growable: false);
 
     unawaited(_persistMatches());
+    _typingByMatchId[chatId] = false;
+    _isOffline = false;
+    _lastHistorySyncedAt = DateTime.now();
     notifyListeners();
   }
 
@@ -509,4 +717,112 @@ class MatchesProvider extends ChangeNotifier {
     _messageStreams[chatId]?.add(updated);
     notifyListeners();
   }
+
+  void sendTyping({required String matchId, required bool typing}) {
+    final peerId = _matchPeerMap[matchId];
+    if (peerId == null) return;
+    _socket?.emit('chat.typing', {'peerId': peerId, 'typing': typing});
+
+    _typingDebounceTimers[matchId]?.cancel();
+    if (typing) {
+      _typingDebounceTimers[matchId] = Timer(const Duration(seconds: 2), () {
+        sendTyping(matchId: matchId, typing: false);
+      });
+    }
+  }
+
+  Future<void> _retryQueuedMessages() async {
+    if (_queuedMessages.isEmpty) return;
+    final auth = _auth;
+    final token = await _resolveToken();
+    if (auth == null || token == null || token.isEmpty) return;
+    final pending = List<_QueuedMessage>.from(_queuedMessages);
+    for (final item in pending) {
+      final peerId = _matchPeerMap[item.matchId];
+      if (peerId == null) continue;
+      try {
+        await _backendApi.sendMessage(
+          token: token,
+          receiverId: peerId,
+          content: item.text,
+        );
+        _queuedMessages.removeWhere((m) => m.localId == item.localId);
+        _isOffline = false;
+        await _refreshHistory(item.matchId);
+      } catch (_) {
+        _isOffline = true;
+      }
+    }
+    if (_queuedMessages.isEmpty) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    }
+    notifyListeners();
+  }
+
+  void _handleRealtimeTyping(Map<String, dynamic> payload) {
+    final chatId = (payload['chatId'] ?? '').toString();
+    final senderId = (payload['senderId'] ?? '').toString();
+    final typing = payload['typing'] == true;
+    final me = _auth?.backendUserId;
+    if (chatId.isEmpty || senderId.isEmpty || me == null || senderId == me) {
+      return;
+    }
+    _typingByMatchId[chatId] = typing;
+    notifyListeners();
+  }
+
+  String? syncLabel({bool history = false}) {
+    final base = history ? _lastHistorySyncedAt : _lastSyncedAt;
+    if (base == null) return null;
+    final seconds = DateTime.now().difference(base).inSeconds;
+    if (seconds < 1) return 'Last synced just now';
+    return 'Last synced ${seconds}s ago';
+  }
+
+  Future<String?> _resolveToken() async {
+    final auth = _auth;
+    if (auth == null) return null;
+    if (auth.backendToken != null && auth.backendToken!.isNotEmpty) {
+      return auth.backendToken;
+    }
+    final ready = await auth.ensureBackendSession();
+    if (!ready) return null;
+    return auth.backendToken;
+  }
+
+  String? _derivePeerId(String matchId) {
+    final me = _auth?.backendUserId;
+    if (me == null) return null;
+    MatchThread? thread;
+    for (final m in _matches) {
+      if (m.id == matchId) {
+        thread = m;
+        break;
+      }
+    }
+    if (thread == null) return null;
+    for (final id in thread.userIds) {
+      if (id != me) return id;
+    }
+    return null;
+  }
+
+  void _startRetryTimer() {
+    _retryTimer ??= Timer.periodic(const Duration(seconds: 8), (_) {
+      unawaited(_retryQueuedMessages());
+    });
+  }
+}
+
+class _QueuedMessage {
+  const _QueuedMessage({
+    required this.matchId,
+    required this.text,
+    required this.localId,
+  });
+
+  final String matchId;
+  final String text;
+  final String localId;
 }

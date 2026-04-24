@@ -22,6 +22,8 @@ class DiscoveryUserDto {
     required this.birthDate,
     required this.photos,
     required this.distanceKm,
+    this.isOnline,
+    this.isVerified,
   });
 
   final String id;
@@ -30,6 +32,8 @@ class DiscoveryUserDto {
   final DateTime birthDate;
   final List<String> photos;
   final double distanceKm;
+  final bool? isOnline;
+  final bool? isVerified;
 }
 
 class SwipeResultDto {
@@ -55,10 +59,45 @@ class SwipeResultDto {
 }
 
 class OtpVerifyResultDto {
-  OtpVerifyResultDto({required this.success, this.message});
+  OtpVerifyResultDto({
+    required this.success,
+    this.message,
+    this.accessToken,
+    this.refreshToken,
+    this.isNewUser,
+    this.userId,
+  });
 
   final bool success;
   final String? message;
+  final String? accessToken;
+  final String? refreshToken;
+  final bool? isNewUser;
+  final String? userId;
+}
+
+class BackendProfileDto {
+  BackendProfileDto({
+    required this.id,
+    required this.name,
+    required this.gender,
+    required this.birthDate,
+    required this.phone,
+    required this.bio,
+    required this.photos,
+    required this.lat,
+    required this.lng,
+  });
+
+  final String id;
+  final String name;
+  final String gender;
+  final DateTime? birthDate;
+  final String? phone;
+  final String? bio;
+  final List<String> photos;
+  final double? lat;
+  final double? lng;
 }
 
 class AuthSessionDto {
@@ -117,6 +156,20 @@ class MatchSummaryDto {
   final String peerName;
   final String? peerPhotoUrl;
   final DateTime? matchedAt;
+}
+
+class PrivacySettingsDto {
+  PrivacySettingsDto({
+    required this.discoverable,
+    required this.showOnlineStatus,
+    required this.showDistanceInDiscovery,
+    required this.allowMessagesFromMatchesOnly,
+  });
+
+  final bool discoverable;
+  final bool showOnlineStatus;
+  final bool showDistanceInDiscovery;
+  final bool allowMessagesFromMatchesOnly;
 }
 
 class BackendApi {
@@ -338,9 +391,37 @@ class BackendApi {
     );
     _ensureSuccess(response, fallback: 'Failed to verify OTP');
     final body = _mapFromBody(_decode(response));
+    final user = _mapFromBody(body['user']);
     return OtpVerifyResultDto(
       success: (body['success'] as bool?) ?? true,
       message: body['message'] as String?,
+      accessToken: body['access_token'] as String?,
+      refreshToken: body['refresh_token'] as String?,
+      isNewUser: body['isNewUser'] as bool?,
+      userId: user['id'] as String?,
+    );
+  }
+
+  Future<BackendProfileDto> me({required String token}) async {
+    final response = await _get(
+      _uri('/users/me'),
+      headers: _headers(token: token),
+    );
+    _ensureSuccess(response, fallback: 'Failed to load profile');
+    final body = _mapFromBody(_decode(response));
+    final photosRaw = body['photos'];
+    return BackendProfileDto(
+      id: (body['id'] as String?) ?? '',
+      name: (body['name'] as String?) ?? '',
+      gender: (body['gender'] as String?) ?? 'OTHER',
+      birthDate: DateTime.tryParse((body['birthDate'] as String?) ?? ''),
+      phone: body['phone'] as String?,
+      bio: body['bio'] as String?,
+      photos: ((photosRaw as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(growable: false),
+      lat: (body['lat'] as num?)?.toDouble(),
+      lng: (body['lng'] as num?)?.toDouble(),
     );
   }
 
@@ -501,6 +582,69 @@ class BackendApi {
     _ensureSuccess(response, fallback: 'Failed to remove notification token');
   }
 
+  Future<PrivacySettingsDto> getPrivacySettings({required String token}) async {
+    final response = await _get(
+      _uri('/users/privacy'),
+      headers: _headers(token: token),
+    );
+    _ensureSuccess(response, fallback: 'Failed to load privacy settings');
+    final body = _mapFromBody(_decode(response));
+    final data = _mapFromBody(body['data']);
+    final source = data.isNotEmpty ? data : body;
+    return PrivacySettingsDto(
+      discoverable: (source['discoverable'] as bool?) ?? true,
+      showOnlineStatus: (source['showOnlineStatus'] as bool?) ?? true,
+      showDistanceInDiscovery:
+          (source['showDistanceInDiscovery'] as bool?) ?? true,
+      allowMessagesFromMatchesOnly:
+          (source['allowMessagesFromMatchesOnly'] as bool?) ?? true,
+    );
+  }
+
+  Future<PrivacySettingsDto> updatePrivacySettings({
+    required String token,
+    bool? discoverable,
+    bool? showOnlineStatus,
+    bool? showDistanceInDiscovery,
+    bool? allowMessagesFromMatchesOnly,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (discoverable != null) {
+      payload['discoverable'] = discoverable;
+    }
+    if (showOnlineStatus != null) {
+      payload['showOnlineStatus'] = showOnlineStatus;
+    }
+    if (showDistanceInDiscovery != null) {
+      payload['showDistanceInDiscovery'] = showDistanceInDiscovery;
+    }
+    if (allowMessagesFromMatchesOnly != null) {
+      payload['allowMessagesFromMatchesOnly'] = allowMessagesFromMatchesOnly;
+    }
+    if (payload.isEmpty) {
+      throw ApiException('No privacy settings provided');
+    }
+
+    final response = await _put(
+      _uri('/users/privacy'),
+      headers: _headers(token: token),
+      body: jsonEncode(payload),
+    );
+    _ensureSuccess(response, fallback: 'Failed to update privacy settings');
+    final body = _mapFromBody(_decode(response));
+    final data = _mapFromBody(body['data']);
+    final source = data.isNotEmpty ? data : body;
+
+    return PrivacySettingsDto(
+      discoverable: (source['discoverable'] as bool?) ?? true,
+      showOnlineStatus: (source['showOnlineStatus'] as bool?) ?? true,
+      showDistanceInDiscovery:
+          (source['showDistanceInDiscovery'] as bool?) ?? true,
+      allowMessagesFromMatchesOnly:
+          (source['allowMessagesFromMatchesOnly'] as bool?) ?? true,
+    );
+  }
+
   bool _isRemoteUrl(String value) {
     final lower = value.toLowerCase();
     return lower.startsWith('http://') || lower.startsWith('https://');
@@ -583,6 +727,10 @@ class BackendApi {
                 .map((p) => p.toString())
                 .toList(growable: false),
             distanceKm: (distanceRaw as num?)?.toDouble() ?? 0,
+            isOnline: map['isOnline'] is bool ? map['isOnline'] as bool : null,
+            isVerified: map['isVerified'] is bool
+                ? map['isVerified'] as bool
+                : null,
           );
         })
         .where((e) => e.id.isNotEmpty)

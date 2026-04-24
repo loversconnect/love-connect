@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Chat%20detail%20screen.dart';
+import 'package:lerolove/Screens/Main%20app%20screen.dart';
 import 'package:lerolove/models/match_models.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
@@ -18,11 +21,27 @@ class _MatchesTabState extends State<MatchesTab> {
   String _searchQuery = '';
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
+  String? _statusChip;
+  Timer? _statusTimer;
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _showStatusChip(String text) {
+    _statusTimer?.cancel();
+    setState(() {
+      _statusChip = text;
+    });
+    _statusTimer = Timer(const Duration(milliseconds: 1300), () {
+      if (!mounted) return;
+      setState(() {
+        _statusChip = null;
+      });
+    });
   }
 
   void _showUnmatchConfirmation(
@@ -60,6 +79,7 @@ class _MatchesTabState extends State<MatchesTab> {
                 await context.read<MatchesProvider>().unmatch(match.id);
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
+                _showStatusChip('Updated');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Unmatched with $name'),
@@ -137,57 +157,118 @@ class _MatchesTabState extends State<MatchesTab> {
       body: uid == null
           ? _buildSignedOutState()
           : matchesProvider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : matchesProvider.matches.isEmpty
-          ? _buildEmptyState()
-          : matches.isEmpty
-          ? _buildNoResultsState()
-          : Column(
-              children: [
-                if (!_isSearching)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    color: colorScheme.surface,
-                    child: Row(
+          ? _buildMatchesSkeleton()
+          : RefreshIndicator(
+              onRefresh: () => context.read<MatchesProvider>().refreshNow(),
+              child: matchesProvider.matches.isEmpty
+                  ? _buildRefreshableState(_buildEmptyState())
+                  : matches.isEmpty
+                  ? _buildRefreshableState(_buildNoResultsState())
+                  : Column(
                       children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: Responsive.icon(context, 18),
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${matchesProvider.matches.length} ${matchesProvider.matches.length == 1 ? 'Match' : 'Matches'}',
-                          style: TextStyle(
-                            fontSize: Responsive.font(context, 14),
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface.withOpacity(0.7),
+                        if (matchesProvider.isOffline)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.errorContainer.withValues(
+                                alpha: 0.9,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'You are offline. We will sync when back online.',
+                              style: TextStyle(
+                                color: colorScheme.onErrorContainer,
+                                fontWeight: FontWeight.w600,
+                                fontSize: Responsive.font(context, 12),
+                              ),
+                            ),
+                          ),
+                        if (!_isSearching)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            color: colorScheme.surface,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: Responsive.icon(context, 18),
+                                  color: colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${matchesProvider.matches.length} ${matchesProvider.matches.length == 1 ? 'Match' : 'Matches'}',
+                                  style: TextStyle(
+                                    fontSize: Responsive.font(context, 14),
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface.withOpacity(
+                                      0.7,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                if (matchesProvider.syncLabel() != null)
+                                  Expanded(
+                                    child: Text(
+                                      matchesProvider.syncLabel()!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontSize: Responsive.font(context, 11),
+                                        color: colorScheme.onSurface.withValues(
+                                          alpha: 0.58,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        if (_statusChip != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: _buildStatusChip(_statusChip!),
+                          ),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: matches.length,
+                            itemBuilder: (context, index) {
+                              final match = matches[index];
+                              final otherId = _otherUserId(match, uid);
+                              return _buildMatchTile(match, otherId, isDark);
+                            },
                           ),
                         ),
                       ],
                     ),
-                  ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: matches.length,
-                    itemBuilder: (context, index) {
-                      final match = matches[index];
-                      final otherId = _otherUserId(match, uid);
-                      return _buildMatchTile(match, otherId, isDark);
-                    },
-                  ),
-                ),
-              ],
             ),
+    );
+  }
+
+  Widget _buildRefreshableState(Widget child) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.22),
+        child,
+        const SizedBox(height: 80),
+      ],
     );
   }
 
   Widget _buildMatchTile(MatchThread match, String otherUserId, bool isDark) {
     final colorScheme = Theme.of(context).colorScheme;
-    final uid = context.read<AuthProvider>().uid!;
+    final auth = context.read<AuthProvider>();
+    final uid = auth.backendUserId ?? auth.uid!;
     final hasUnread = match.unreadFor(uid) > 0;
 
     final name = match.peerName ?? otherUserId;
@@ -226,6 +307,7 @@ class _MatchesTabState extends State<MatchesTab> {
       child: InkWell(
         onTap: () async {
           await context.read<MatchesProvider>().markAsRead(match.id);
+          _showStatusChip('Updated');
           if (!mounted) return;
           await Navigator.push(
             context,
@@ -309,7 +391,7 @@ class _MatchesTabState extends State<MatchesTab> {
                         Expanded(
                           child: Text(
                             match.lastMessage.isEmpty
-                                ? 'Say hello!'
+                                ? 'New match. Start the conversation.'
                                 : match.lastMessage,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -354,6 +436,33 @@ class _MatchesTabState extends State<MatchesTab> {
                         ],
                       ],
                     ),
+                    if (match.lastMessage.isEmpty) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () async {
+                            await context.read<MatchesProvider>().markAsRead(
+                              match.id,
+                            );
+                            if (!mounted) return;
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatDetailScreen(
+                                  matchName: name,
+                                  matchId: match.id,
+                                  peerUserId: otherUserId,
+                                  matchPhotoUrl: match.peerPhotoUrl,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text('Start Chat'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -424,6 +533,16 @@ class _MatchesTabState extends State<MatchesTab> {
               color: isDark ? Colors.grey[600] : Colors.grey[500],
             ),
           ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const MainAppScreen()),
+              );
+            },
+            icon: const Icon(Icons.explore),
+            label: const Text('Go to Discover'),
+          ),
         ],
       ),
     );
@@ -450,6 +569,78 @@ class _MatchesTabState extends State<MatchesTab> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String text) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.w700,
+          fontSize: Responsive.font(context, 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchesSkeleton() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: 6,
+      separatorBuilder: (_, __) => Divider(
+        height: 1,
+        color: colorScheme.outlineVariant.withValues(alpha: 0.2),
+      ),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.7,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _skeletonLine(120, 14, colorScheme),
+                    const SizedBox(height: 8),
+                    _skeletonLine(double.infinity, 12, colorScheme),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _skeletonLine(double width, double height, ColorScheme colorScheme) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
       ),
     );
   }

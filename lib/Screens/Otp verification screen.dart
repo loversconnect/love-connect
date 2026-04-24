@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lerolove/Screens/Add%20photos%20screen.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/Screens/Preferences%20screen.dart';
 import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
@@ -97,10 +99,18 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
       return;
     }
 
-    final profile = context.read<ProfileProvider>();
-    final nextScreen = profile.hasCompletedProfile
-        ? const MainAppScreen()
-        : const ProfileBasicsScreen();
+    await context.read<ProfileProvider>().syncFromBackendIfAvailable();
+    final profileData = context.read<ProfileProvider>().currentProfile;
+    final Widget nextScreen;
+    if (profileData == null || !profileData.hasCompletedBasics) {
+      nextScreen = const ProfileBasicsScreen();
+    } else if (!profileData.hasSelfiePhoto) {
+      nextScreen = const AddPhotosScreen();
+    } else if (!profileData.hasLocationSet) {
+      nextScreen = const PreferencesScreen();
+    } else {
+      nextScreen = const MainAppScreen();
+    }
 
     // Navigate to profile setup first when profile is incomplete.
     Navigator.pushAndRemoveUntil(

@@ -115,6 +115,8 @@ class ChatMessageModel {
     required this.text,
     required this.sentAt,
     required this.readAt,
+    this.isPending = false,
+    this.isFailed = false,
   });
 
   final String id;
@@ -122,8 +124,11 @@ class ChatMessageModel {
   final String text;
   final DateTime? sentAt;
   final DateTime? readAt;
+  final bool isPending;
+  final bool isFailed;
 
   bool get isRead => readAt != null;
+  bool get isDelivered => !isPending && !isFailed;
 
   factory ChatMessageModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
@@ -133,6 +138,26 @@ class ChatMessageModel {
       text: (data['text'] as String?) ?? '',
       sentAt: (data['sentAt'] as Timestamp?)?.toDate(),
       readAt: (data['readAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  ChatMessageModel copyWith({
+    String? id,
+    String? senderId,
+    String? text,
+    DateTime? sentAt,
+    DateTime? readAt,
+    bool? isPending,
+    bool? isFailed,
+  }) {
+    return ChatMessageModel(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      text: text ?? this.text,
+      sentAt: sentAt ?? this.sentAt,
+      readAt: readAt ?? this.readAt,
+      isPending: isPending ?? this.isPending,
+      isFailed: isFailed ?? this.isFailed,
     );
   }
 }

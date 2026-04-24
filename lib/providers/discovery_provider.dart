@@ -27,13 +27,31 @@ class DiscoveryProvider extends ChangeNotifier {
   final Set<String> _likedProfileIds = <String>{};
   final Set<String> _blockedProfileIds = <String>{};
   final Map<String, double> _backendDistanceKmByUserId = <String, double>{};
+  final Map<String, bool> _onlineKnownByUserId = <String, bool>{};
+  final Map<String, bool> _verifiedKnownByUserId = <String, bool>{};
 
   List<UserProfile> _allProfiles = const [];
   bool _isLoading = false;
   String? _error;
+  DateTime? _lastSyncedAt;
+  bool _isOffline = false;
+  final Set<String> _queuedLikeIds = <String>{};
+  Timer? _retryTimer;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
+  int get backendCandidateCount => _allProfiles.length;
+  bool get hasBackendCandidates => _allProfiles.isNotEmpty;
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+  bool get isOffline => _isOffline;
+  int get queuedActionsCount => _queuedLikeIds.length;
+
+  String? syncLabel() {
+    if (_lastSyncedAt == null) return null;
+    final seconds = DateTime.now().difference(_lastSyncedAt!).inSeconds;
+    if (seconds < 1) return 'Last synced just now';
+    return 'Last synced ${seconds}s ago';
+  }
 
   void bind(AuthProvider auth, ProfileProvider profileProvider) {
     final authChanged = _auth?.uid != auth.uid;
@@ -46,6 +64,9 @@ class DiscoveryProvider extends ChangeNotifier {
     _likedProfileIds.clear();
     _blockedProfileIds.clear();
     _backendDistanceKmByUserId.clear();
+    _onlineKnownByUserId.clear();
+    _verifiedKnownByUserId.clear();
+    _queuedLikeIds.clear();
     _allProfiles = const [];
 
     if (auth.uid != null) {
@@ -157,6 +178,22 @@ class DiscoveryProvider extends ChangeNotifier {
               .map((dto) => MapEntry(dto.id, dto.distanceKm)),
         );
 
+      _onlineKnownByUserId
+        ..clear()
+        ..addEntries(
+          backendUsers
+              .where((dto) => dto.id.isNotEmpty && dto.isOnline != null)
+              .map((dto) => MapEntry(dto.id, dto.isOnline!)),
+        );
+
+      _verifiedKnownByUserId
+        ..clear()
+        ..addEntries(
+          backendUsers
+              .where((dto) => dto.id.isNotEmpty && dto.isVerified != null)
+              .map((dto) => MapEntry(dto.id, dto.isVerified!)),
+        );
+
       _allProfiles = backendUsers
           .map((dto) {
             final parts = dto.name.trim().split(RegExp(r'\s+'));
@@ -174,8 +211,8 @@ class DiscoveryProvider extends ChangeNotifier {
               bio: '',
               interests: const <String>[],
               photoUrls: dto.photos,
-              isOnline: false,
-              isVerified: false,
+              isOnline: dto.isOnline ?? false,
+              isVerified: dto.isVerified ?? false,
               lastSeen: null,
               latitude: null,
               longitude: null,
@@ -184,7 +221,17 @@ class DiscoveryProvider extends ChangeNotifier {
             );
           })
           .toList(growable: false);
+      _isOffline = false;
+      _lastSyncedAt = DateTime.now();
+      await _flushQueuedLikes(token);
     } catch (e) {
+      _backendDistanceKmByUserId.clear();
+      _onlineKnownByUserId.clear();
+      _verifiedKnownByUserId.clear();
+      _allProfiles = const [];
+      if (_isLikelyOfflineError(e)) {
+        _isOffline = true;
+      }
       _error = e.toString().contains('Location permission')
           ? 'Enable location permission to discover nearby people.'
           : 'Could not load nearby profiles.';
@@ -226,12 +273,28 @@ class DiscoveryProvider extends ChangeNotifier {
     required bool verifiedProfilesOnlyValue,
     required DiscoverSortMode discoverSortModeValue,
   }) async {
+    _error = null;
     interestedIn = interestedInValue;
     ageRange = ageRangeValue;
     maxDistanceKm = maxDistanceKmValue;
     showOnlineOnly = showOnlineOnlyValue;
     verifiedProfilesOnly = verifiedProfilesOnlyValue;
     discoverSortMode = discoverSortModeValue;
+    _dismissedProfileIds.clear();
+
+    await _profileProvider?.updateDiscoveryPreferences(
+      DiscoveryPreferences(
+        interestedIn: interestedInValue,
+        minAge: ageRangeValue.start.round(),
+        maxAge: ageRangeValue.end.round(),
+        maxDistanceKm: maxDistanceKmValue,
+        showOnlineOnly: showOnlineOnlyValue,
+        verifiedProfilesOnly: verifiedProfilesOnlyValue,
+        sortMode: discoverSortModeValue == DiscoverSortMode.bestMatch
+            ? 'bestMatch'
+            : 'nearby',
+      ),
+    );
     notifyListeners();
     await loadProfiles();
   }
@@ -250,8 +313,36 @@ class DiscoveryProvider extends ChangeNotifier {
         swipedId: profile.id,
         action: true,
       );
+      _error = null;
+      _isOffline = false;
+      _lastSyncedAt = DateTime.now();
+      _queuedLikeIds.remove(profile.id);
       return result;
-    } catch (_) {
+    } on ApiException catch (e) {
+      _dismissedProfileIds.remove(profile.id);
+      _likedProfileIds.remove(profile.id);
+      if (_isLikelyOfflineError(e)) {
+        _queuedLikeIds.add(profile.id);
+        _startRetryQueue();
+        _isOffline = true;
+        _error = 'No internet right now. Like queued and will retry.';
+      } else {
+        _error = e.message;
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _dismissedProfileIds.remove(profile.id);
+      _likedProfileIds.remove(profile.id);
+      if (_isLikelyOfflineError(e)) {
+        _queuedLikeIds.add(profile.id);
+        _startRetryQueue();
+        _isOffline = true;
+        _error = 'No internet right now. Like queued and will retry.';
+      } else {
+        _error = 'Could not send like: $e';
+      }
+      notifyListeners();
       return null;
     }
   }
@@ -268,6 +359,17 @@ class DiscoveryProvider extends ChangeNotifier {
 
     try {
       await _backendApi.swipe(token: token, swipedId: profileId, action: false);
+      _error = null;
+      _isOffline = false;
+      _lastSyncedAt = DateTime.now();
+    } on ApiException catch (e) {
+      if (_isLikelyOfflineError(e)) {
+        _isOffline = true;
+        _error = 'You are offline. We will sync when back online.';
+      } else {
+        _error = e.message;
+      }
+      notifyListeners();
     } catch (_) {
       // Keep UX smooth if a pass call fails; profile remains dismissed locally.
     }
@@ -278,14 +380,78 @@ class DiscoveryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshProfiles() async {
+    _dismissedProfileIds.clear();
+    _backendDistanceKmByUserId.clear();
+    _onlineKnownByUserId.clear();
+    _verifiedKnownByUserId.clear();
+    _allProfiles = const [];
+    notifyListeners();
+    await loadProfiles();
+  }
+
+  void _startRetryQueue() {
+    _retryTimer ??= Timer.periodic(const Duration(seconds: 12), (_) {
+      final auth = _auth;
+      if (auth?.backendToken == null || _queuedLikeIds.isEmpty) return;
+      unawaited(_retryQueuedLikes());
+    });
+  }
+
+  Future<void> _retryQueuedLikes() async {
+    final token = await _resolveBackendToken();
+    if (token == null) return;
+    await _flushQueuedLikes(token);
+    notifyListeners();
+  }
+
+  Future<void> _flushQueuedLikes(String token) async {
+    if (_queuedLikeIds.isEmpty) return;
+    final pending = _queuedLikeIds.toList(growable: false);
+    var updated = false;
+    for (final userId in pending) {
+      try {
+        await _backendApi.swipe(token: token, swipedId: userId, action: true);
+        _queuedLikeIds.remove(userId);
+        updated = true;
+      } catch (_) {}
+    }
+    if (updated && _queuedLikeIds.isEmpty) {
+      _error = null;
+      _isOffline = false;
+      _lastSyncedAt = DateTime.now();
+    }
+  }
+
+  bool _isLikelyOfflineError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('timed out') ||
+        text.contains('socket') ||
+        text.contains('network') ||
+        text.contains('failed host lookup') ||
+        text.contains('connection');
+  }
+
+  Future<void> resetFiltersToBroadDefaults() async {
+    await updateDiscoverySettings(
+      interestedInValue: 'Everyone',
+      ageRangeValue: const RangeValues(18, 60),
+      maxDistanceKmValue: 100,
+      showOnlineOnlyValue: false,
+      verifiedProfilesOnlyValue: false,
+      discoverSortModeValue: DiscoverSortMode.nearby,
+    );
+  }
+
   int compatibilityScore(UserProfile profile) {
     final myInterests =
         _profileProvider?.currentProfile?.interests ?? const <String>[];
-
     final sharedCount = profile.interests
         .where((interest) => myInterests.contains(interest))
         .length;
-    final interestScore = (sharedCount * 25).clamp(0, 60);
+    final interestScore = sharedCount <= 0
+        ? 0
+        : (sharedCount * 12).clamp(0, 36);
 
     final distance = distanceTo(profile, _profileProvider?.currentProfile);
     final distanceBase = maxDistanceKm <= 0 ? 1 : maxDistanceKm;
@@ -293,13 +459,43 @@ class DiscoveryProvider extends ChangeNotifier {
       0.0,
       1.0,
     );
-    final distanceScore = (distanceFactor * 30).round();
+    final distanceScore = (distanceFactor * 34).round();
 
-    final midpoint = (ageRange.start + ageRange.end) / 2;
-    final ageDelta = (profile.age - midpoint).abs();
-    final ageScore = (10 - ageDelta).clamp(0, 10).round();
+    final minAge = ageRange.start.round();
+    final maxAge = ageRange.end.round();
+    final ageScore = profile.age >= minAge && profile.age <= maxAge
+        ? 24
+        : (12 - (profile.age - ((minAge + maxAge) / 2)).abs())
+              .clamp(0, 12)
+              .round();
 
-    return (interestScore + distanceScore + ageScore).clamp(0, 100);
+    final interestPreference =
+        interestedIn == 'Everyone' ||
+        _normalizeGender(profile.gender) == _normalizeGender(interestedIn);
+    final preferenceScore = interestPreference ? 22 : 0;
+
+    final profileQualityScore =
+        (profile.photoUrls.isNotEmpty ? 4 : 0) +
+        (profile.bio.trim().isNotEmpty ? 6 : 0) +
+        (profile.isVerified ? 4 : 0) +
+        (profile.isOnline ? 2 : 0);
+
+    final raw =
+        interestScore +
+        distanceScore +
+        ageScore +
+        preferenceScore +
+        profileQualityScore;
+    return raw.clamp(5, 100);
+  }
+
+  int sharedInterestCount(UserProfile profile) {
+    final myInterests =
+        _profileProvider?.currentProfile?.interests ?? const <String>[];
+    if (myInterests.isEmpty || profile.interests.isEmpty) return 0;
+    return profile.interests
+        .where((interest) => myInterests.contains(interest))
+        .length;
   }
 
   bool _passesDiscoveryFilters(UserProfile profile) {
@@ -342,10 +538,11 @@ class DiscoveryProvider extends ChangeNotifier {
             _normalizeGender(interestedInValue)) {
       return false;
     }
-    if (showOnlineOnlyValue && !profile.isOnline) {
-      return false;
-    }
-    if (verifiedProfilesOnlyValue && !profile.isVerified) {
+    final onlineKnown = _onlineKnownByUserId.containsKey(profile.id);
+    if (showOnlineOnlyValue && onlineKnown && !profile.isOnline) return false;
+
+    final verifiedKnown = _verifiedKnownByUserId.containsKey(profile.id);
+    if (verifiedProfilesOnlyValue && verifiedKnown && !profile.isVerified) {
       return false;
     }
 
@@ -355,6 +552,9 @@ class DiscoveryProvider extends ChangeNotifier {
   double distanceTo(UserProfile other, UserProfile? me) {
     final backendDistance = _backendDistanceKmByUserId[other.id];
     if (backendDistance != null) {
+      if (backendDistance < 0) {
+        return maxDistanceKm * 0.6;
+      }
       return backendDistance;
     }
 
@@ -391,6 +591,11 @@ class DiscoveryProvider extends ChangeNotifier {
 
   double distanceFromCurrent(UserProfile other) {
     return distanceTo(other, _profileProvider?.currentProfile);
+  }
+
+  bool isDistanceHidden(UserProfile other) {
+    final backendDistance = _backendDistanceKmByUserId[other.id];
+    return backendDistance != null && backendDistance < 0;
   }
 
   double _degToRad(double degree) => degree * (math.pi / 180.0);
@@ -446,5 +651,11 @@ class DiscoveryProvider extends ChangeNotifier {
   static String buildMatchId(String a, String b) {
     final ids = [a, b]..sort();
     return '${ids[0]}_${ids[1]}';
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
   }
 }

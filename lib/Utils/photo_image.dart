@@ -33,6 +33,21 @@ class PhotoImage extends StatelessWidget {
       return Image.network(
         trimmed,
         fit: fit,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) return child;
+          return AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return _placeholder(context);
+        },
         errorBuilder: (context, error, stackTrace) => _placeholder(context),
       );
     }
@@ -41,6 +56,17 @@ class PhotoImage extends StatelessWidget {
       return Image.file(
         File(trimmed),
         fit: fit,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) return child;
+          return AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
         errorBuilder: (context, error, stackTrace) => _placeholder(context),
       );
     }

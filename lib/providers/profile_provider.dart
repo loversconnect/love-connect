@@ -26,6 +26,10 @@ class ProfileProvider extends ChangeNotifier {
 
   String? _error;
   String? get error => _error;
+  bool _isOffline = false;
+  bool get isOffline => _isOffline;
+  Timer? _profileSyncRetryTimer;
+  _PendingProfileSync? _pendingProfileSync;
 
   bool _isLocalAuth(String? uid) => uid != null && uid.startsWith('local_');
   String _localProfileKey(String uid) => '$_localProfilePrefix$uid';
@@ -53,12 +57,13 @@ class ProfileProvider extends ChangeNotifier {
       );
       notifyListeners();
       unawaited(
-        _restoreLocalProfile(uid, auth.currentPhoneNumber ?? '').whenComplete(
-          () {
-            _isProfileReady = true;
-            notifyListeners();
-          },
-        ),
+        _restoreLocalProfile(
+          uid,
+          auth.currentPhoneNumber ?? '',
+        ).then((_) => syncFromBackendIfAvailable()).whenComplete(() {
+          _isProfileReady = true;
+          notifyListeners();
+        }),
       );
       return;
     }
@@ -235,6 +240,38 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateDiscoveryPreferences(
+    DiscoveryPreferences preferences,
+  ) async {
+    final uid = _auth?.uid;
+    if (uid == null) return;
+
+    _currentProfile =
+        (_currentProfile ??
+                _defaultLocalProfile(
+                  uid: uid,
+                  phone: _auth?.currentPhoneNumber ?? '',
+                ))
+            .copyWith(preferences: preferences, lastSeen: DateTime.now());
+
+    if (_isLocalAuth(uid)) {
+      await _persistLocalProfile(uid);
+      notifyListeners();
+      return;
+    }
+
+    try {
+      await _firestore.collection('users').doc(uid).set({
+        'preferences': preferences.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      _error = 'Could not save discovery settings: $e';
+    } finally {
+      notifyListeners();
+    }
+  }
+
   Future<void> updateOnlineStatus(bool isOnline) async {
     final uid = _auth?.uid;
     if (uid == null) return;
@@ -259,7 +296,9 @@ class ProfileProvider extends ChangeNotifier {
   bool get hasCompletedProfile {
     final profile = _currentProfile;
     if (profile == null) return false;
-    return profile.hasCompletedBasics;
+    return profile.hasCompletedBasics &&
+        profile.hasSelfiePhoto &&
+        profile.hasLocationSet;
   }
 
   Future<void> updateLocalLocation({
@@ -282,6 +321,45 @@ class ProfileProvider extends ChangeNotifier {
             );
     await _persistLocalProfile(uid);
     notifyListeners();
+  }
+
+  Future<void> syncFromBackendIfAvailable() async {
+    final uid = _auth?.uid;
+    if (uid == null || !_isLocalAuth(uid)) return;
+
+    final token = await _tryGetBackendToken();
+    if (token == null) return;
+
+    try {
+      final dto = await _backendApi.me(token: token);
+      if (dto.id.isEmpty) return;
+      final parts = _splitName(dto.name);
+      _currentProfile =
+          (_currentProfile ??
+                  _defaultLocalProfile(
+                    uid: uid,
+                    phone: _auth?.currentPhoneNumber ?? '',
+                  ))
+              .copyWith(
+                firstName: parts.$1,
+                lastName: parts.$2,
+                age: _ageFromBirthDate(dto.birthDate),
+                gender: dto.gender,
+                phoneNumber: (dto.phone?.trim().isNotEmpty ?? false)
+                    ? dto.phone
+                    : (_auth?.currentPhoneNumber ?? ''),
+                bio: dto.bio ?? _currentProfile?.bio ?? '',
+                photoUrls: dto.photos,
+                latitude: dto.lat,
+                longitude: dto.lng,
+                lastSeen: DateTime.now(),
+              );
+      await _persistLocalProfile(uid);
+      _error = null;
+      notifyListeners();
+    } catch (_) {
+      // keep local profile fallback if backend fetch fails
+    }
   }
 
   UserProfile _defaultLocalProfile({
@@ -372,9 +450,29 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  (String, String) _splitName(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return ('', '');
+    final first = parts.first;
+    final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+    return (first, last);
+  }
+
+  int _ageFromBirthDate(DateTime? birthDate) {
+    if (birthDate == null) return 0;
+    final now = DateTime.now();
+    var age = now.year - birthDate.year;
+    if (now.month < birthDate.month ||
+        (now.month == birthDate.month && now.day < birthDate.day)) {
+      age--;
+    }
+    return age < 0 ? 0 : age;
+  }
+
   @override
   void dispose() {
     _profileSub?.cancel();
+    _profileSyncRetryTimer?.cancel();
     super.dispose();
   }
 
@@ -420,15 +518,76 @@ class ProfileProvider extends ChangeNotifier {
     List<String>? photos,
   }) async {
     final token = await _tryGetBackendToken();
-    if (token == null) return;
+    if (token == null) {
+      _queueProfileSync(
+        name: name,
+        gender: gender,
+        birthDate: birthDate,
+        photos: photos,
+      );
+      return;
+    }
 
-    await _backendApi.updateUserProfile(
-      token: token,
+    try {
+      await _backendApi.updateUserProfile(
+        token: token,
+        name: name,
+        gender: gender == null ? null : _normalizeGender(gender),
+        birthDateIso: birthDate?.toIso8601String(),
+        photos: photos,
+      );
+      _isOffline = false;
+      _pendingProfileSync = null;
+    } catch (_) {
+      _queueProfileSync(
+        name: name,
+        gender: gender,
+        birthDate: birthDate,
+        photos: photos,
+      );
+    }
+  }
+
+  void _queueProfileSync({
+    String? name,
+    String? gender,
+    DateTime? birthDate,
+    List<String>? photos,
+  }) {
+    _isOffline = true;
+    _pendingProfileSync = _PendingProfileSync(
       name: name,
-      gender: gender == null ? null : _normalizeGender(gender),
-      birthDateIso: birthDate?.toIso8601String(),
+      gender: gender,
+      birthDate: birthDate,
       photos: photos,
     );
+    _error = 'You are offline. Profile changes were saved and will sync soon.';
+    notifyListeners();
+    _profileSyncRetryTimer ??= Timer.periodic(const Duration(seconds: 12), (_) {
+      unawaited(_flushPendingProfileSync());
+    });
+  }
+
+  Future<void> _flushPendingProfileSync() async {
+    final queued = _pendingProfileSync;
+    if (queued == null) return;
+    final token = await _tryGetBackendToken();
+    if (token == null) return;
+    try {
+      await _backendApi.updateUserProfile(
+        token: token,
+        name: queued.name,
+        gender: queued.gender == null ? null : _normalizeGender(queued.gender!),
+        birthDateIso: queued.birthDate?.toIso8601String(),
+        photos: queued.photos,
+      );
+      _pendingProfileSync = null;
+      _isOffline = false;
+      _error = null;
+      notifyListeners();
+    } catch (_) {
+      _isOffline = true;
+    }
   }
 
   Future<String?> _tryGetBackendToken() async {
@@ -451,4 +610,18 @@ class ProfileProvider extends ChangeNotifier {
     if (token != null) return token;
     throw Exception('Backend session unavailable');
   }
+}
+
+class _PendingProfileSync {
+  const _PendingProfileSync({
+    this.name,
+    this.gender,
+    this.birthDate,
+    this.photos,
+  });
+
+  final String? name;
+  final String? gender;
+  final DateTime? birthDate;
+  final List<String>? photos;
 }

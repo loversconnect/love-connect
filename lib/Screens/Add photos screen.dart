@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lerolove/Screens/Preferences%20screen.dart';
+import 'package:lerolove/Utils/face_match_validator.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AddPhotosScreen extends StatefulWidget {
   const AddPhotosScreen({Key? key}) : super(key: key);
@@ -16,6 +21,9 @@ class AddPhotosScreen extends StatefulWidget {
 class _AddPhotosScreenState extends State<AddPhotosScreen> {
   final List<String?> _photos = List<String?>.filled(6, null);
   final ImagePicker _picker = ImagePicker();
+  final FaceDetector _faceDetector = FaceMatchValidator.buildDetector();
+  bool _isValidatingFace = false;
+  FaceSignature? _selfieReference;
 
   @override
   void initState() {
@@ -25,18 +33,67 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     for (var i = 0; i < existingPhotos.length && i < _photos.length; i++) {
       _photos[i] = existingPhotos[i];
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showSelfieHintOnce();
+    });
+    FaceMatchValidator.loadSelfieSignature().then((value) {
+      _selfieReference = value;
+    });
+  }
+
+  Future<void> _showSelfieHintOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    final shown = prefs.getBool('hint_selfie_required_shown') ?? false;
+    if (shown || !mounted) return;
+    await prefs.setBool('hint_selfie_required_shown', true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Selfie in slot 1 is required for trust and profile safety.',
+        ),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   bool get _hasMinimumPhotos => _photos.where((p) => p != null).length >= 1;
+  bool get _hasRequiredSelfie => _photos[0] != null;
 
   Future<void> _addPhoto(int index) async {
+    if (_isValidatingFace) return;
+
+    if (index > 0 && !_hasRequiredSelfie) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please take your main selfie first (slot 1).'),
+        ),
+      );
+      return;
+    }
+
     try {
+      final isSelfieSlot = index == 0;
       final selected = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: isSelfieSlot ? ImageSource.camera : ImageSource.gallery,
+        preferredCameraDevice: CameraDevice.front,
         imageQuality: 85,
         maxWidth: 1600,
       );
       if (selected == null) return;
+
+      final validationError = await _validateFaceRules(
+        imagePath: selected.path,
+        isSelfieSlot: isSelfieSlot,
+      );
+      if (!mounted) return;
+      if (validationError != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(validationError)));
+        return;
+      }
 
       setState(() {
         _photos[index] = selected.path;
@@ -44,21 +101,68 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open gallery. Please check permissions.'),
+        SnackBar(
+          content: Text(
+            index == 0
+                ? 'Could not open front camera. Please allow camera permission.'
+                : 'Could not open gallery. Please check permissions.',
+          ),
         ),
       );
+    }
+  }
+
+  Future<String?> _validateFaceRules({
+    required String imagePath,
+    required bool isSelfieSlot,
+  }) async {
+    setState(() {
+      _isValidatingFace = true;
+    });
+
+    try {
+      if (!await File(imagePath).exists()) {
+        return 'Could not read selected photo.';
+      }
+
+      final result = await FaceMatchValidator.validatePhoto(
+        detector: _faceDetector,
+        imagePath: imagePath,
+        isSelfieSlot: isSelfieSlot,
+        reference: _selfieReference,
+      );
+      if (!result.success) {
+        return result.message ?? 'Face verification failed.';
+      }
+
+      if (isSelfieSlot && result.signature != null) {
+        _selfieReference = result.signature;
+        await FaceMatchValidator.saveSelfieSignature(result.signature!);
+      }
+      return null;
+    } catch (_) {
+      return 'Face check failed. Please retake the photo.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isValidatingFace = false;
+        });
+      }
     }
   }
 
   void _removePhoto(int index) {
     setState(() {
       _photos[index] = null;
+      if (index == 0) {
+        _selfieReference = null;
+        FaceMatchValidator.clearSelfieSignature();
+      }
     });
   }
 
   Future<void> _continue() async {
-    if (_hasMinimumPhotos) {
+    if (_hasMinimumPhotos && _hasRequiredSelfie) {
       final photos = _photos.whereType<String>().toList(growable: false);
       final profileProvider = context.read<ProfileProvider>();
       await profileProvider.updateProfile(photoUrls: photos);
@@ -76,20 +180,10 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     }
   }
 
-  Future<void> _skip() async {
-    final profileProvider = context.read<ProfileProvider>();
-    await profileProvider.updateProfile(photoUrls: const []);
-    if (!mounted) return;
-    if (profileProvider.error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const PreferencesScreen()),
-    );
+  @override
+  void dispose() {
+    _faceDetector.close();
+    super.dispose();
   }
 
   @override
@@ -124,13 +218,27 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'At least 1 photo required',
+                      'Main selfie is required first',
                       style: textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onBackground.withOpacity(0.7),
                         fontSize: Responsive.font(context, 15),
                       ),
                     ),
                     const SizedBox(height: 32),
+                    if (_isValidatingFace) ...[
+                      LinearProgressIndicator(
+                        minHeight: 4,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Validating face...',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.65),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     // Photo Grid
                     GridView.builder(
                       shrinkWrap: true,
@@ -242,7 +350,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        index == 0 ? 'Main' : '${index + 1}',
+                                        index == 0 ? 'Selfie' : '${index + 1}',
                                         style: textTheme.bodySmall?.copyWith(
                                           color: colorScheme.onBackground
                                               .withOpacity(0.6),
@@ -279,7 +387,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Photos should be clear and show your face. Tap to add, long-press to remove.',
+                              'Take a clear selfie in slot 1 first. Then add more photos from gallery. Tap to add, long-press to remove.',
                               style: textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onBackground.withOpacity(
                                   0.7,
@@ -304,14 +412,17 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _hasMinimumPhotos && !profileProvider.isLoading
+                      onPressed:
+                          _hasMinimumPhotos &&
+                              _hasRequiredSelfie &&
+                              !profileProvider.isLoading
                           ? _continue
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _hasMinimumPhotos
+                        backgroundColor: _hasMinimumPhotos && _hasRequiredSelfie
                             ? colorScheme.primary
                             : colorScheme.surfaceVariant,
-                        foregroundColor: _hasMinimumPhotos
+                        foregroundColor: _hasMinimumPhotos && _hasRequiredSelfie
                             ? colorScheme.onPrimary
                             : colorScheme.onSurface,
                       ),
@@ -325,11 +436,6 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                             )
                           : const Text('Continue'),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: profileProvider.isLoading ? null : _skip,
-                    child: const Text('Skip for Now'),
                   ),
                 ],
               ),

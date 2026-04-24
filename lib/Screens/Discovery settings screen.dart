@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:lerolove/Utils/app_feedback.dart';
 
 class DiscoverySettingsScreen extends StatefulWidget {
   const DiscoverySettingsScreen({Key? key}) : super(key: key);
@@ -51,15 +52,14 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
       discoverSortModeValue: _sortMode,
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Discovery settings updated'),
-        duration: Duration(seconds: 2),
-      ),
+    await AppFeedback.showBottomStatus(
+      context,
+      message: 'Discovery settings saved',
     );
     setState(() {
       _hasChanges = false;
     });
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
@@ -159,6 +159,8 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                   return ChoiceChip(
                     label: Text(label),
                     selected: isSelected,
+                    showCheckmark: true,
+                    checkmarkColor: colorScheme.onPrimary,
                     onSelected: (_) {
                       setState(() {
                         _interestedIn = value;
@@ -329,6 +331,8 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                   ChoiceChip(
                     label: const Text('Nearby first'),
                     selected: _sortMode == DiscoverSortMode.nearby,
+                    showCheckmark: true,
+                    checkmarkColor: colorScheme.onPrimary,
                     onSelected: (_) {
                       setState(() {
                         _sortMode = DiscoverSortMode.nearby;
@@ -347,6 +351,8 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                   ChoiceChip(
                     label: const Text('Best relation'),
                     selected: _sortMode == DiscoverSortMode.bestMatch,
+                    showCheckmark: true,
+                    checkmarkColor: colorScheme.onPrimary,
                     onSelected: (_) {
                       setState(() {
                         _sortMode = DiscoverSortMode.bestMatch;

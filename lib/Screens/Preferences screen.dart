@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
+import 'package:lerolove/services/backend_api.dart';
 import 'package:lerolove/Utils/responsive.dart';
 
 class PreferencesScreen extends StatefulWidget {
@@ -12,6 +16,7 @@ class PreferencesScreen extends StatefulWidget {
 }
 
 class _PreferencesScreenState extends State<PreferencesScreen> {
+  final BackendApi _backendApi = BackendApi();
   late String _interestedIn;
   late RangeValues _ageRange;
   late double _maxDistance;
@@ -41,7 +46,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   }
 
   Future<void> _startMatching() async {
-    await context.read<DiscoveryProvider>().updateDiscoverySettings(
+    final discovery = context.read<DiscoveryProvider>();
+    final locationReady = await _ensureLocationReady();
+    if (!locationReady) return;
+
+    await discovery.updateDiscoverySettings(
       interestedInValue: _interestedIn,
       ageRangeValue: _ageRange,
       maxDistanceKmValue: _maxDistance,
@@ -56,6 +65,69 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
       MaterialPageRoute(builder: (context) => const MainAppScreen()),
       (route) => false,
     );
+  }
+
+  Future<bool> _ensureLocationReady() async {
+    final profile = context.read<ProfileProvider>();
+    final auth = context.read<AuthProvider>();
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Turn on location services to continue.')),
+      );
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission is required.')),
+      );
+      return false;
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    );
+
+    await profile.updateLocalLocation(
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+
+    final ready = await auth.ensureBackendSession();
+    final token = auth.backendToken;
+    if (!ready || token == null || token.isEmpty) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Backend session unavailable. Please try again.'),
+        ),
+      );
+      return false;
+    }
+
+    try {
+      await _backendApi.updateLocation(
+        token: token,
+        lat: position.latitude,
+        lng: position.longitude,
+      );
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not sync your location yet.')),
+      );
+      return false;
+    }
   }
 
   int _estimateLocalMatches() {
@@ -125,6 +197,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                         return ChoiceChip(
                           label: Text(label),
                           selected: isSelected,
+                          showCheckmark: true,
+                          checkmarkColor: colorScheme.onPrimary,
                           onSelected: (_) {
                             setState(() {
                               _interestedIn = value;
@@ -248,6 +322,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                         ChoiceChip(
                           label: const Text('Nearby first'),
                           selected: _sortMode == DiscoverSortMode.nearby,
+                          showCheckmark: true,
+                          checkmarkColor: colorScheme.onPrimary,
                           onSelected: (_) {
                             setState(() {
                               _sortMode = DiscoverSortMode.nearby;
@@ -265,6 +341,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                         ChoiceChip(
                           label: const Text('Best relation'),
                           selected: _sortMode == DiscoverSortMode.bestMatch,
+                          showCheckmark: true,
+                          checkmarkColor: colorScheme.onPrimary,
                           onSelected: (_) {
                             setState(() {
                               _sortMode = DiscoverSortMode.bestMatch;

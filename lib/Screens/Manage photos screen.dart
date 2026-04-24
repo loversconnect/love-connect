@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lerolove/Utils/face_match_validator.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/providers/profile_provider.dart';
@@ -15,8 +17,11 @@ class ManagePhotosScreen extends StatefulWidget {
 class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
   final List<String?> _photos = List<String?>.filled(6, null);
   final ImagePicker _picker = ImagePicker();
+  final FaceDetector _faceDetector = FaceMatchValidator.buildDetector();
 
   bool _hasChanges = false;
+  bool _isValidatingFace = false;
+  FaceSignature? _selfieReference;
 
   @override
   void initState() {
@@ -26,16 +31,43 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     for (var i = 0; i < existingPhotos.length && i < _photos.length; i++) {
       _photos[i] = existingPhotos[i];
     }
+    FaceMatchValidator.loadSelfieSignature().then((value) {
+      _selfieReference = value;
+    });
   }
 
   Future<void> _addPhoto(int index) async {
+    if (_isValidatingFace) return;
+
+    if (index > 0 && _photos[0] == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please set your main selfie first.')),
+      );
+      return;
+    }
+
     try {
+      final isSelfieSlot = index == 0;
       final selected = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: isSelfieSlot ? ImageSource.camera : ImageSource.gallery,
+        preferredCameraDevice: CameraDevice.front,
         imageQuality: 85,
         maxWidth: 1600,
       );
       if (selected == null) return;
+
+      final validationError = await _validateFaceRules(
+        imagePath: selected.path,
+        isSelfieSlot: isSelfieSlot,
+      );
+      if (!mounted) return;
+      if (validationError != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(validationError)));
+        return;
+      }
 
       setState(() {
         _photos[index] = selected.path;
@@ -44,10 +76,50 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open gallery. Please check permissions.'),
+        SnackBar(
+          content: Text(
+            index == 0
+                ? 'Could not open front camera. Please allow camera permission.'
+                : 'Could not open gallery. Please check permissions.',
+          ),
         ),
       );
+    }
+  }
+
+  Future<String?> _validateFaceRules({
+    required String imagePath,
+    required bool isSelfieSlot,
+  }) async {
+    setState(() {
+      _isValidatingFace = true;
+    });
+
+    try {
+      final result = await FaceMatchValidator.validatePhoto(
+        detector: _faceDetector,
+        imagePath: imagePath,
+        isSelfieSlot: isSelfieSlot,
+        reference: _selfieReference,
+      );
+      if (!result.success) {
+        return result.message ?? 'Face verification failed.';
+      }
+
+      if (isSelfieSlot && result.signature != null) {
+        _selfieReference = result.signature;
+        await FaceMatchValidator.saveSelfieSignature(result.signature!);
+      }
+
+      return null;
+    } catch (_) {
+      return 'Face check failed. Please retake the photo.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isValidatingFace = false;
+        });
+      }
     }
   }
 
@@ -55,6 +127,10 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     setState(() {
       _photos[index] = null;
       _hasChanges = true;
+      if (index == 0) {
+        _selfieReference = null;
+        FaceMatchValidator.clearSelfieSignature();
+      }
     });
   }
 
@@ -151,6 +227,20 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_isValidatingFace) ...[
+                LinearProgressIndicator(
+                  minHeight: 4,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Validating face...',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.65),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -186,7 +276,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Your first photo is your main profile photo. Long-press any photo to remove it.',
+                            'Main selfie must be your real face (slot 1). Other photos must match your verified selfie. Long-press any photo to remove it.',
                             style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onBackground.withOpacity(0.7),
                               height: 1.4,
@@ -367,7 +457,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  index == 0 ? 'Add Main' : 'Add Photo',
+                                  index == 0 ? 'Selfie' : 'Add Photo',
                                   style: textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onBackground.withOpacity(
                                       0.6,
@@ -495,5 +585,11 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _faceDetector.close();
+    super.dispose();
   }
 }

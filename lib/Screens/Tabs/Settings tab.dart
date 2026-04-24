@@ -13,6 +13,8 @@ import '../Edit profile screen.dart';
 import '../Manage photos screen.dart';
 import '../Discovery settings screen.dart';
 import '../Blocked users screen.dart';
+import '../Notifications settings screen.dart';
+import '../Privacy settings screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({Key? key}) : super(key: key);
@@ -27,6 +29,8 @@ class SettingsTab extends StatelessWidget {
     final displayPhone = profile?.phoneNumber.isNotEmpty == true
         ? profile!.phoneNumber
         : appState.displayPhone;
+    final completeness = profile?.completenessPercentage ?? 0;
+    final completenessValue = (completeness / 100).clamp(0.0, 1.0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -96,7 +100,7 @@ class SettingsTab extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: LinearProgressIndicator(
-                                  value: 0.7,
+                                  value: completenessValue,
                                   minHeight: 6,
                                   backgroundColor: isDark
                                       ? Colors.grey[800]
@@ -109,7 +113,7 @@ class SettingsTab extends StatelessWidget {
                               ),
                               const SizedBox(width: 10),
                               Text(
-                                '70%',
+                                '$completeness%',
                                 style: TextStyle(
                                   fontSize: Responsive.font(context, 12),
                                   fontWeight: FontWeight.w600,
@@ -231,11 +235,17 @@ class SettingsTab extends StatelessWidget {
               ),
             ),
           ),
-          _buildListTile(context, Icons.notifications, 'Notifications', () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notifications coming soon')),
-            );
-          }),
+          _buildListTile(
+            context,
+            Icons.notifications,
+            'Notifications',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const NotificationsSettingsScreen(),
+              ),
+            ),
+          ),
           const Divider(height: 1),
 
           // Safety & Privacy Section
@@ -251,11 +261,17 @@ class SettingsTab extends StatelessWidget {
               ),
             ),
           ),
-          _buildListTile(context, Icons.privacy_tip, 'Privacy Settings', () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Privacy Settings coming soon')),
-            );
-          }),
+          _buildListTile(
+            context,
+            Icons.privacy_tip,
+            'Privacy Settings',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const PrivacySettingsScreen(),
+              ),
+            ),
+          ),
           const Divider(height: 1),
 
           // Support Section

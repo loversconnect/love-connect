@@ -92,6 +92,22 @@ class UserProfile {
   }
 
   bool get hasCompletedBasics => firstName.trim().isNotEmpty && age >= 18;
+  bool get hasSelfiePhoto => photoUrls.isNotEmpty;
+  bool get hasLocationSet => latitude != null && longitude != null;
+
+  int get completenessPercentage {
+    var score = 0;
+    if (firstName.trim().isNotEmpty) score += 10;
+    if (lastName.trim().isNotEmpty) score += 10;
+    if (age >= 18) score += 10;
+    if (gender.trim().isNotEmpty) score += 5;
+    if (phoneNumber.trim().isNotEmpty) score += 5;
+    if (bio.trim().isNotEmpty) score += 15;
+    if (interests.isNotEmpty) score += 10;
+    if (photoUrls.isNotEmpty) score += 25;
+    if (hasLocationSet) score += 10;
+    return score.clamp(0, 100);
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -107,10 +123,7 @@ class UserProfile {
       'isVerified': isVerified,
       'lastSeen': lastSeen == null ? null : Timestamp.fromDate(lastSeen!),
       'preferences': preferences.toMap(),
-      'location': {
-        'lat': latitude,
-        'lng': longitude,
-      },
+      'location': {'lat': latitude, 'lng': longitude},
       'role': role,
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -118,7 +131,8 @@ class UserProfile {
 
   factory UserProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
-    final location = (data['location'] as Map<String, dynamic>?) ??
+    final location =
+        (data['location'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
 
     return UserProfile(
@@ -140,8 +154,9 @@ class UserProfile {
       lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
       latitude: (location['lat'] as num?)?.toDouble(),
       longitude: (location['lng'] as num?)?.toDouble(),
-      preferences:
-          DiscoveryPreferences.fromMap(data['preferences'] as Map<String, dynamic>?),
+      preferences: DiscoveryPreferences.fromMap(
+        data['preferences'] as Map<String, dynamic>?,
+      ),
       role: (data['role'] as String?) ?? 'user',
     );
   }

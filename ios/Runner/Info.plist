@@ -51,6 +51,8 @@
 	<string>We use your location to improve nearby discovery.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We use your photos so you can upload profile pictures.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We use your camera to capture a live selfie for profile verification.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

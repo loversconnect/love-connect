@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:lerolove/services/backend_api.dart';
+import 'package:lerolove/services/message_alert_service.dart';
 
 class PushService {
   PushService._();
@@ -19,6 +21,10 @@ class PushService {
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedSub;
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  static const String _messagesChannelId = 'lerolove_messages';
+  static const String _generalChannelId = 'lerolove_general';
 
   String? _backendToken;
   bool _initialized = false;
@@ -29,6 +35,7 @@ class PushService {
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
+    await _initLocalNotifications();
 
     _tokenRefreshSub = messaging.onTokenRefresh.listen((newToken) {
       final backendToken = _backendToken;
@@ -38,6 +45,7 @@ class PushService {
 
     _foregroundSub = FirebaseMessaging.onMessage.listen((message) {
       _eventsController.add(message.data);
+      unawaited(_handleForegroundMessageNotification(message));
     });
 
     _openedSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -86,6 +94,92 @@ class PushService {
         platform: _platformLabel(),
       );
     } catch (_) {}
+  }
+
+  Future<void> _initLocalNotifications() async {
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    const iosSettings = DarwinInitializationSettings();
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(settings);
+    await _createAndroidChannels();
+  }
+
+  Future<void> _createAndroidChannels() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    final android = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) return;
+
+    await android.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _messagesChannelId,
+        'Messages',
+        description: 'Alerts for new chat messages',
+        importance: Importance.max,
+        playSound: true,
+      ),
+    );
+    await android.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _generalChannelId,
+        'General',
+        description: 'General alerts such as matches',
+        importance: Importance.high,
+        playSound: true,
+      ),
+    );
+  }
+
+  bool _isChatMessage(RemoteMessage message) {
+    final type = (message.data['type'] ?? '').toString();
+    if (type == 'chat.message') return true;
+    return message.data.containsKey('chatId');
+  }
+
+  Future<void> _handleForegroundMessageNotification(
+    RemoteMessage message,
+  ) async {
+    if (!_isChatMessage(message)) return;
+
+    final title =
+        message.notification?.title ??
+        (message.data['title']?.toString() ?? 'New message');
+    final body =
+        message.notification?.body ??
+        (message.data['body']?.toString() ?? 'You received a new message.');
+
+    final androidDetails = AndroidNotificationDetails(
+      _messagesChannelId,
+      'Messages',
+      channelDescription: 'Alerts for new chat messages',
+      importance: Importance.max,
+      priority: Priority.high,
+      category: AndroidNotificationCategory.message,
+      playSound: false,
+    );
+
+    const iosDetails = DarwinNotificationDetails(presentSound: false);
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      details,
+    );
+
+    await MessageAlertService.playSelectedRingtone();
   }
 
   String _platformLabel() {

@@ -50,13 +50,13 @@ class ThemeManager extends ChangeNotifier {
 
   // Light Theme
   static ThemeData get lightTheme {
-    const primary = Color(0xFF3B1E4A);
-    const secondary = Color(0xFFE7A8C6);
-    const ivory = Color(0xFFFFF6F0);
-    const surface = Color(0xFFFFFBF8);
-    const surfaceVariant = Color(0xFFF3E6ED);
-    const textPrimary = Color(0xFF231629);
-    const error = Color(0xFFD64B6C);
+    const primary = Color(0xFFF31224);
+    const secondary = Color(0xFFFF8B95);
+    const ivory = Color(0xFFFFFEFE);
+    const surface = Color(0xFFFFFFFF);
+    const surfaceVariant = Color(0xFFFFE7EA);
+    const textPrimary = Color(0xFF1A1A1A);
+    const error = Color(0xFFB00020);
 
     final base = ThemeData(brightness: Brightness.light).textTheme;
     final manrope = GoogleFonts.manropeTextTheme(base);
@@ -111,10 +111,7 @@ class ThemeManager extends ChangeNotifier {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -125,19 +122,13 @@ class ThemeManager extends ChangeNotifier {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primary,
-          textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -155,7 +146,10 @@ class ThemeManager extends ChangeNotifier {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
       cardTheme: const CardThemeData(
         color: surface,
@@ -178,13 +172,13 @@ class ThemeManager extends ChangeNotifier {
 
   // Dark Theme
   static ThemeData get darkTheme {
-    const primary = Color(0xFFE7A8C6);
-    const secondary = Color(0xFFB97AA0);
-    const surface = Color(0xFF1D1622);
-    const background = Color(0xFF130F16);
-    const surfaceVariant = Color(0xFF2A2030);
-    const textPrimary = Color(0xFFF2E8EE);
-    const error = Color(0xFFE0738D);
+    const primary = Color(0xFFFF5A66);
+    const secondary = Color(0xFFFF9DA5);
+    const surface = Color(0xFF18181A);
+    const background = Color(0xFF101012);
+    const surfaceVariant = Color(0xFF2A2A2E);
+    const textPrimary = Color(0xFFFFF4F5);
+    const error = Color(0xFFFF8A80);
 
     final base = ThemeData(brightness: Brightness.dark).textTheme;
     final manrope = GoogleFonts.manropeTextTheme(base);
@@ -210,7 +204,7 @@ class ThemeManager extends ChangeNotifier {
         background: background,
         error: error,
         surfaceVariant: surfaceVariant,
-        onPrimary: Color(0xFF2C1320),
+        onPrimary: Colors.white,
         onSecondary: textPrimary,
         onSurface: textPrimary,
         onBackground: textPrimary,
@@ -239,10 +233,7 @@ class ThemeManager extends ChangeNotifier {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -253,19 +244,13 @@ class ThemeManager extends ChangeNotifier {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primary,
-          textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -283,7 +268,10 @@ class ThemeManager extends ChangeNotifier {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
       cardTheme: const CardThemeData(
         color: surface,

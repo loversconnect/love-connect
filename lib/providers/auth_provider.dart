@@ -442,8 +442,27 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_localUidKey, _localUid!);
       await prefs.setString(_localPhoneKey, _localPhoneNumber!);
+      if ((result.accessToken ?? '').isNotEmpty &&
+          (result.refreshToken ?? '').isNotEmpty) {
+        _backendToken = result.accessToken!;
+        _backendRefreshToken = result.refreshToken!;
+        _backendUserId =
+            result.userId ??
+            _extractBackendUserIdFromToken(result.accessToken!);
+        await prefs.setString(_tokenKey(_localUid!), _backendToken!);
+        await prefs.setString(
+          _refreshTokenKey(_localUid!),
+          _backendRefreshToken!,
+        );
+        if (_backendUserId != null && _backendUserId!.isNotEmpty) {
+          await prefs.setString(_backendUserIdKey(_localUid!), _backendUserId!);
+        }
+        await PushService.instance.bindBackendSession(_backendToken!);
+      }
 
-      final backendOk = await ensureBackendSession();
+      final backendOk = isBackendAuthenticated
+          ? true
+          : await ensureBackendSession();
       _setLoading(false);
       return backendOk;
     } on ApiException catch (e) {

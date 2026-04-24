@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Screens/Add%20photos%20screen.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/Screens/Preferences%20screen.dart';
 import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
@@ -68,10 +70,17 @@ class _SplashScreenState extends State<SplashScreen>
     final Widget nextScreen;
     if (!auth.isAuthenticated) {
       nextScreen = const WelcomeScreen();
-    } else if (profile.hasCompletedProfile) {
-      nextScreen = const MainAppScreen();
     } else {
-      nextScreen = const ProfileBasicsScreen();
+      final data = profile.currentProfile;
+      if (data == null || !data.hasCompletedBasics) {
+        nextScreen = const ProfileBasicsScreen();
+      } else if (!data.hasSelfiePhoto) {
+        nextScreen = const AddPhotosScreen();
+      } else if (!data.hasLocationSet) {
+        nextScreen = const PreferencesScreen();
+      } else {
+        nextScreen = const MainAppScreen();
+      }
     }
 
     Navigator.pushReplacement(
