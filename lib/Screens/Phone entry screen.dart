@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lerolove/Screens/Otp%20verification%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/app_state.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -42,7 +43,13 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
 
       if (!ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(auth.error ?? 'Could not continue right now')),
+          SnackBar(
+            content: Text(
+              auth.error != null
+                  ? context.trError(auth.error!)
+                  : context.tr('could_not_continue'),
+            ),
+          ),
         );
         return;
       }
@@ -108,7 +115,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            'Secure Sign In',
+                            context.tr('secure_sign_in'),
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
@@ -118,7 +125,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                       const SizedBox(height: 16),
                       // Title
                       Text(
-                        'Your Phone Number',
+                        context.tr('your_phone_number'),
                         style: textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           fontSize: Responsive.font(context, 28),
@@ -127,7 +134,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                       const SizedBox(height: 8),
                       // Subtitle
                       Text(
-                        'We will send a 6-digit OTP to verify your number.',
+                        context.tr('otp_intro'),
                         style: textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onBackground.withOpacity(0.7),
                           fontSize: Responsive.font(context, 15),
@@ -148,7 +155,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Phone Number',
+                              context.tr('phone_number'),
                               style: textTheme.labelLarge?.copyWith(
                                 color: colorScheme.onBackground.withOpacity(
                                   0.6,
@@ -217,7 +224,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Enter your 9-digit number. We add +265 automatically.',
+                              context.tr('phone_help'),
                               style: textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onBackground.withOpacity(
                                   0.55,
@@ -252,7 +259,7 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Continue'),
+                              : Text(context.tr('continue')),
                         ),
                       ),
                       const SizedBox(height: 16),

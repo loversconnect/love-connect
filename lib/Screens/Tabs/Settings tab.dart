@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/theme_manager.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Screens/Theme%20settings%20screen.dart';
+import 'package:lerolove/providers/app_lock_provider.dart';
 import 'package:lerolove/providers/auth_provider.dart';
+import 'package:lerolove/providers/language_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/Utils/app_state.dart';
@@ -15,9 +19,11 @@ import '../Discovery settings screen.dart';
 import '../Blocked users screen.dart';
 import '../Notifications settings screen.dart';
 import '../Privacy settings screen.dart';
+import '../FAQ screen.dart';
+import '../Support center screen.dart';
 
 class SettingsTab extends StatelessWidget {
-  const SettingsTab({Key? key}) : super(key: key);
+  const SettingsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +31,8 @@ class SettingsTab extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final profile = context.watch<ProfileProvider>().currentProfile;
     final appState = context.watch<AppState>();
+    final appLock = context.watch<AppLockProvider>();
+    final languageProvider = context.watch<LanguageProvider>();
     final displayName = profile?.name ?? appState.displayName;
     final displayPhone = profile?.phoneNumber.isNotEmpty == true
         ? profile!.phoneNumber
@@ -33,7 +41,7 @@ class SettingsTab extends StatelessWidget {
     final completenessValue = (completeness / 100).clamp(0.0, 1.0);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(context.tr('settings'))),
       body: ListView(
         children: [
           // Profile Card
@@ -126,7 +134,7 @@ class SettingsTab extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Profile completeness',
+                            context.tr('profile_completeness'),
                             style: TextStyle(
                               fontSize: Responsive.font(context, 12),
                               color: isDark
@@ -149,17 +157,23 @@ class SettingsTab extends StatelessWidget {
           const Divider(height: 1),
 
           // Appearance Section
-          _buildSection(context, 'Appearance', isDark),
+          _buildSection(context, context.tr('appearance'), isDark),
           _buildListTile(
             context,
             Icons.palette_outlined,
-            'Theme & Wallpaper',
+            context.tr('theme_wallpaper'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const ThemeSettingsScreen(),
               ),
             ),
+          ),
+          _buildListTile(
+            context,
+            Icons.language,
+            context.tr('language'),
+            () => _showLanguagePicker(context, languageProvider.language),
           ),
           // Dark Mode Quick Toggle
           Consumer<ThemeManager>(
@@ -171,21 +185,21 @@ class SettingsTab extends StatelessWidget {
                   color: isDark ? Colors.grey[400] : Colors.grey[700],
                 ),
                 title: Text(
-                  'Dark Mode',
+                  context.tr('dark_mode'),
                   style: TextStyle(
                     fontSize: Responsive.font(context, 16),
                     color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
                 subtitle: Text(
-                  isDarkMode ? 'On' : 'Off',
+                  isDarkMode ? context.tr('on') : context.tr('off'),
                   style: TextStyle(
                     fontSize: Responsive.font(context, 13),
                     color: isDark ? Colors.grey[500] : Colors.grey[600],
                   ),
                 ),
                 value: isDarkMode,
-                activeColor: colorScheme.primary,
+                activeThumbColor: colorScheme.primary,
                 onChanged: (value) {
                   themeManager.setThemeMode(
                     value ? ThemeMode.dark : ThemeMode.light,
@@ -197,11 +211,11 @@ class SettingsTab extends StatelessWidget {
           const Divider(height: 1),
 
           // Profile Section
-          _buildSection(context, 'Profile', isDark),
+          _buildSection(context, context.tr('profile'), isDark),
           _buildListTile(
             context,
             Icons.edit,
-            'Edit Profile',
+            context.tr('edit_profile'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -212,7 +226,7 @@ class SettingsTab extends StatelessWidget {
           _buildListTile(
             context,
             Icons.photo_library,
-            'Manage Photos',
+            context.tr('manage_photos'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -223,11 +237,11 @@ class SettingsTab extends StatelessWidget {
           const Divider(height: 1),
 
           // Preferences Section
-          _buildSection(context, 'Preferences', isDark),
+          _buildSection(context, context.tr('preferences'), isDark),
           _buildListTile(
             context,
             Icons.tune,
-            'Discovery Settings',
+            context.tr('discovery_settings'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -238,7 +252,7 @@ class SettingsTab extends StatelessWidget {
           _buildListTile(
             context,
             Icons.notifications,
-            'Notifications',
+            context.tr('notifications'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -249,11 +263,11 @@ class SettingsTab extends StatelessWidget {
           const Divider(height: 1),
 
           // Safety & Privacy Section
-          _buildSection(context, 'Safety & Privacy', isDark),
+          _buildSection(context, context.tr('safety_privacy'), isDark),
           _buildListTile(
             context,
             Icons.block,
-            'Blocked Users',
+            context.tr('blocked_users'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -264,7 +278,7 @@ class SettingsTab extends StatelessWidget {
           _buildListTile(
             context,
             Icons.privacy_tip,
-            'Privacy Settings',
+            context.tr('privacy_settings'),
             () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -274,49 +288,124 @@ class SettingsTab extends StatelessWidget {
           ),
           const Divider(height: 1),
 
+          // App Security
+          _buildSection(context, context.tr('app_security'), isDark),
+          SwitchListTile(
+            secondary: Icon(
+              Icons.lock_outline,
+              color: isDark ? Colors.grey[400] : Colors.grey[700],
+            ),
+            title: Text(
+              context.tr('lock_app_on_open'),
+              style: TextStyle(
+                fontSize: Responsive.font(context, 16),
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            subtitle: Text(
+              appLock.enabled
+                  ? context.tr('lock_enabled')
+                  : context.tr('lock_subtitle'),
+              style: TextStyle(
+                fontSize: Responsive.font(context, 13),
+                color: isDark ? Colors.grey[500] : Colors.grey[600],
+              ),
+            ),
+            value: appLock.enabled,
+            activeThumbColor: colorScheme.primary,
+            onChanged: (value) => _toggleAppLock(context, value),
+          ),
+          SwitchListTile(
+            secondary: Icon(
+              Icons.fingerprint,
+              color: isDark ? Colors.grey[400] : Colors.grey[700],
+            ),
+            title: Text(
+              context.tr('use_biometrics'),
+              style: TextStyle(
+                fontSize: Responsive.font(context, 16),
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            subtitle: Text(
+              context.tr('biometric_subtitle'),
+              style: TextStyle(
+                fontSize: Responsive.font(context, 13),
+                color: isDark ? Colors.grey[500] : Colors.grey[600],
+              ),
+            ),
+            value: appLock.biometricEnabled,
+            activeThumbColor: colorScheme.primary,
+            onChanged: appLock.enabled
+                ? (value) => _toggleBiometric(context, value)
+                : null,
+          ),
+          _buildListTile(
+            context,
+            Icons.password,
+            appLock.hasPasscode
+                ? context.tr('change_passcode')
+                : context.tr('set_passcode'),
+            () => _setOrChangePasscode(context),
+          ),
+          if (appLock.hasPasscode)
+            _buildListTile(
+              context,
+              Icons.key_off,
+              context.tr('remove_passcode'),
+              () => _removePasscode(context),
+              color: Colors.red,
+            ),
+          const Divider(height: 1),
+
           // Support Section
-          _buildSection(context, 'Support', isDark),
-          _buildListTile(context, Icons.help_outline, 'Help & FAQ', () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Help & FAQ coming soon')),
-            );
-          }),
-          _buildListTile(context, Icons.mail_outline, 'Contact Support', () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Contact Support coming soon')),
-            );
-          }),
-          _buildListTile(context, Icons.info_outline, 'About', () {
+          _buildSection(context, context.tr('support'), isDark),
+          _buildListTile(
+            context,
+            Icons.help_outline,
+            context.tr('help_faq'),
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const FaqScreen()),
+            ),
+          ),
+          _buildListTile(
+            context,
+            Icons.support_agent_outlined,
+            context.tr('support_center'),
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SupportCenterScreen(),
+              ),
+            ),
+          ),
+          _buildListTile(context, Icons.info_outline, context.tr('about'), () {
             _showAboutDialog(context);
           }),
           const Divider(height: 1),
 
           // Account Section
-          _buildSection(context, 'Account', isDark),
+          _buildSection(context, context.tr('account'), isDark),
           _buildListTile(
             context,
             Icons.logout,
-            'Log Out',
+            context.tr('log_out'),
             () => _showLogoutDialog(context),
             color: Colors.red,
           ),
-          _buildListTile(
-            context,
-            Icons.delete_outline,
-            'Delete Account',
-            () => _showDeleteAccountDialog(context),
-            color: Colors.red,
-          ),
 
-          const SizedBox(height: 10),
-          const _BackendStatusPanel(),
+          if (kDebugMode) ...[
+            const SizedBox(height: 10),
+            const _BackendStatusPanel(),
+          ],
 
           const SizedBox(height: 24),
 
           // Version Info
           Center(
             child: Text(
-              'Version 1.0.0',
+              '${context.tr('version_prefix')} 1.0.0',
               style: TextStyle(
                 fontSize: Responsive.font(context, 13),
                 color: Colors.grey[500],
@@ -327,6 +416,329 @@ class SettingsTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _toggleAppLock(BuildContext context, bool enabled) async {
+    final lock = context.read<AppLockProvider>();
+    if (!enabled) {
+      await lock.setEnabled(false);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr('app_lock_disabled'))));
+      return;
+    }
+
+    if (!lock.hasPasscode) {
+      final passcode = await _showPasscodeDialog(
+        context,
+        title: context.tr('set_app_passcode'),
+        actionLabel: context.tr('save'),
+      );
+      if (passcode == null) return;
+      await lock.setPasscode(passcode);
+    }
+
+    await lock.setEnabled(true);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('app_lock_enabled'))));
+  }
+
+  Future<void> _toggleBiometric(BuildContext context, bool enabled) async {
+    final lock = context.read<AppLockProvider>();
+    if (!enabled) {
+      await lock.setBiometricEnabled(false);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr('biometric_disabled'))));
+      return;
+    }
+
+    final supported = await lock.hasBiometricSupport();
+    if (!context.mounted) return;
+    if (!supported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('biometric_not_available')),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final ok = await lock.authenticateWithBiometrics();
+    if (!context.mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('biometric_failed')),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await lock.setBiometricEnabled(true);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('biometric_enabled'))));
+  }
+
+  Future<void> _setOrChangePasscode(BuildContext context) async {
+    final lock = context.read<AppLockProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final verifyTitle = context.tr('verify_current_passcode');
+    final verifyLabel = context.tr('verify');
+    final wrongPasscode = context.tr('current_passcode_wrong');
+    if (lock.hasPasscode) {
+      final current = await _showSingleFieldDialog(
+        context,
+        title: verifyTitle,
+        actionLabel: verifyLabel,
+        obscureText: true,
+      );
+      if (!context.mounted) return;
+      if (current == null || !lock.verifyPasscode(current)) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(wrongPasscode),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    final next = await _showPasscodeDialog(
+      context,
+      title: lock.hasPasscode
+          ? context.tr('change_app_passcode')
+          : context.tr('set_app_passcode'),
+      actionLabel: context.tr('save'),
+    );
+    if (!context.mounted) return;
+    if (next == null) return;
+
+    await lock.setPasscode(next);
+    await lock.setEnabled(true);
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(context.tr('passcode_saved'))));
+  }
+
+  Future<void> _removePasscode(BuildContext context) async {
+    final lock = context.read<AppLockProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final title = context.tr('enter_current_passcode');
+    final actionLabel = context.tr('remove');
+    final incorrect = context.tr('passcode_incorrect');
+    final current = await _showSingleFieldDialog(
+      context,
+      title: title,
+      actionLabel: actionLabel,
+      obscureText: true,
+    );
+    if (!context.mounted) return;
+    if (current == null || !lock.verifyPasscode(current)) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(incorrect),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await lock.clearPasscode();
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(context.tr('passcode_removed'))));
+  }
+
+  Future<String?> _showPasscodeDialog(
+    BuildContext context, {
+    required String title,
+    required String actionLabel,
+  }) async {
+    final pass1 = TextEditingController();
+    final pass2 = TextEditingController();
+    var obscure = true;
+    String? error;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(title),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: pass1,
+                    obscureText: obscure,
+                    keyboardType: TextInputType.number,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      labelText: context.tr('passcode'),
+                      counterText: '',
+                      filled: true,
+                      prefixIcon: const Icon(Icons.password_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: pass2,
+                    obscureText: obscure,
+                    keyboardType: TextInputType.number,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      labelText: context.tr('confirm_passcode'),
+                      counterText: '',
+                      filled: true,
+                      prefixIcon: const Icon(Icons.verified_user_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: !obscure,
+                        onChanged: (v) =>
+                            setState(() => obscure = !(v ?? false)),
+                      ),
+                      Text(context.tr('show_passcode')),
+                    ],
+                  ),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(context.tr('cancel')),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final a = pass1.text.trim();
+                    final b = pass2.text.trim();
+                    if (a.length < 4) {
+                      setState(() => error = context.tr('passcode_min'));
+                      return;
+                    }
+                    if (a != b) {
+                      setState(() => error = context.tr('passcode_mismatch'));
+                      return;
+                    }
+                    Navigator.of(context).pop(a);
+                  },
+                  child: Text(actionLabel),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    pass1.dispose();
+    pass2.dispose();
+    return result;
+  }
+
+  Future<String?> _showSingleFieldDialog(
+    BuildContext context, {
+    required String title,
+    required String actionLabel,
+    bool obscureText = true,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: TextInputType.number,
+            maxLength: 10,
+            decoration: const InputDecoration(counterText: ''),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(context.tr('cancel')),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _showLanguagePicker(
+    BuildContext context,
+    AppLanguage current,
+  ) async {
+    final next = await showModalBottomSheet<AppLanguage>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  current == AppLanguage.english
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  color: current == AppLanguage.english
+                      ? Theme.of(sheetContext).colorScheme.primary
+                      : Theme.of(sheetContext).colorScheme.outline,
+                ),
+                title: Text(sheetContext.tr('english')),
+                onTap: () => Navigator.pop(sheetContext, AppLanguage.english),
+              ),
+              ListTile(
+                leading: Icon(
+                  current == AppLanguage.chichewa
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  color: current == AppLanguage.chichewa
+                      ? Theme.of(sheetContext).colorScheme.primary
+                      : Theme.of(sheetContext).colorScheme.outline,
+                ),
+                title: Text(sheetContext.tr('chichewa')),
+                onTap: () => Navigator.pop(sheetContext, AppLanguage.chichewa),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (next == null || !context.mounted) return;
+    await context.read<LanguageProvider>().setLanguage(next);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('language_saved'))));
   }
 
   Widget _buildSection(BuildContext context, String title, bool isDark) {
@@ -350,7 +762,7 @@ class SettingsTab extends StatelessWidget {
             width: 36,
             height: 2,
             decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.35),
+              color: colorScheme.primary.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -395,11 +807,11 @@ class SettingsTab extends StatelessWidget {
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           title: Text(
-            'Log Out',
+            context.tr('log_out_title'),
             style: TextStyle(color: isDark ? Colors.white : Colors.black87),
           ),
           content: Text(
-            'Are you sure you want to log out?',
+            context.tr('log_out_confirm'),
             style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
           ),
           shape: RoundedRectangleBorder(
@@ -409,7 +821,7 @@ class SettingsTab extends StatelessWidget {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
-                'Cancel',
+                context.tr('cancel'),
                 style: TextStyle(
                   color: isDark ? Colors.grey[400] : Colors.black87,
                 ),
@@ -429,83 +841,7 @@ class SettingsTab extends StatelessWidget {
                 );
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Log Out'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showDeleteAccountDialog(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          title: Text(
-            'Delete Account',
-            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-          ),
-          content: Text(
-            'Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.',
-            style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: isDark ? Colors.grey[400] : Colors.black87,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-                final auth = context.read<AuthProvider>();
-                final api = BackendApi();
-                final ready = await auth.ensureBackendSession();
-                final token = auth.backendToken;
-                if (!context.mounted) return;
-                if (!ready || token == null || token.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not verify backend session.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                try {
-                  await api.deleteMyAccount(token: token);
-                  await auth.signOut();
-                  if (!context.mounted) return;
-                  Navigator.of(context).pop();
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const WelcomeScreen(),
-                    ),
-                    (route) => false,
-                  );
-                } catch (_) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Failed to delete account. Try again.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              child: Text(context.tr('log_out')),
             ),
           ],
         );
@@ -521,7 +857,7 @@ class SettingsTab extends StatelessWidget {
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           title: Text(
-            'About LoversConnect',
+            context.tr('about_loversconnect'),
             style: TextStyle(color: isDark ? Colors.white : Colors.black87),
           ),
           content: Column(
@@ -529,7 +865,7 @@ class SettingsTab extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Version 1.0.0',
+                '${context.tr('version_prefix')} 1.0.0',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 16),
                   fontWeight: FontWeight.bold,
@@ -538,7 +874,7 @@ class SettingsTab extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Find love in Malawi',
+                context.tr('find_love_malawi'),
                 style: TextStyle(
                   fontSize: Responsive.font(context, 14),
                   color: isDark ? Colors.grey[400] : Colors.grey[700],
@@ -546,7 +882,7 @@ class SettingsTab extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                '© 2024 LoversConnect\nAll rights reserved.',
+                '© 2026 LoversConnect\n${context.tr('all_rights_reserved')}',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 12),
                   color: isDark ? Colors.grey[500] : Colors.grey[600],
@@ -560,7 +896,7 @@ class SettingsTab extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+              child: Text(context.tr('close')),
             ),
           ],
         );
@@ -626,8 +962,8 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: ok
-            ? Colors.green.withOpacity(0.12)
-            : Colors.red.withOpacity(0.12),
+            ? Colors.green.withValues(alpha: 0.12)
+            : Colors.red.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
@@ -653,13 +989,13 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: colorScheme.primary.withOpacity(0.15)),
-        ),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colorScheme.primary.withValues(alpha: 0.15)),
+          ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -672,7 +1008,7 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Backend Status (Debug)',
+                  context.tr('backend_status_debug'),
                   style: TextStyle(
                     fontSize: Responsive.font(context, 14),
                     fontWeight: FontWeight.w700,
@@ -685,34 +1021,34 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _statusChip(label: 'OTP Auth', ok: isOtpAuthed),
-                _statusChip(label: 'Backend Token', ok: hasBackendToken),
-                _statusChip(label: 'Backend Session', ok: hasBackendSession),
-                _statusChip(label: 'API Reachable', ok: _apiReachable == true),
+                _statusChip(label: context.tr('otp_auth'), ok: isOtpAuthed),
+                _statusChip(label: context.tr('backend_token'), ok: hasBackendToken),
+                _statusChip(label: context.tr('backend_session'), ok: hasBackendSession),
+                _statusChip(label: context.tr('api_reachable'), ok: _apiReachable == true),
               ],
             ),
             const SizedBox(height: 10),
             Text(
-              'Backend User ID: ${backendUserId ?? 'Not resolved'}',
+              '${context.tr('backend_user_id')}: ${backendUserId ?? context.tr('not_resolved')}',
               style: TextStyle(
                 fontSize: Responsive.font(context, 12),
-                color: colorScheme.onSurface.withOpacity(0.75),
+                color: colorScheme.onSurface.withValues(alpha: 0.75),
               ),
             ),
             if (_lastCheckedAt != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Last checked: ${_timeLabel(_lastCheckedAt!)}',
+                '${context.tr('last_checked')}: ${_timeLabel(_lastCheckedAt!)}',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 12),
-                  color: colorScheme.onSurface.withOpacity(0.75),
+                  color: colorScheme.onSurface.withValues(alpha: 0.75),
                 ),
               ),
             ],
             if (_error != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Error: $_error',
+                '${context.tr('error')}: $_error',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 12),
                   color: Colors.red[700],
@@ -731,7 +1067,11 @@ class _BackendStatusPanelState extends State<_BackendStatusPanel> {
                         child: const CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.network_check),
-                label: Text(_checking ? 'Checking...' : 'Check Connection'),
+                label: Text(
+                  _checking
+                      ? context.tr('checking')
+                      : context.tr('check_connection'),
+                ),
               ),
             ),
           ],

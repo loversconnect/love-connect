@@ -10,12 +10,16 @@ import 'package:lerolove/Utils/chat_background_manager.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/firebase_options.dart';
 import 'package:lerolove/providers/admin_provider.dart';
+import 'package:lerolove/providers/app_lock_provider.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
+import 'package:lerolove/providers/language_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/providers/moderation_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/services/push_service.dart';
+import 'package:lerolove/Utils/app_lock_gate.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -49,6 +53,8 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => ThemeManager()),
         ChangeNotifierProvider(create: (_) => ChatBackgroundManager()),
         ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(create: (_) => AppLockProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<AuthProvider, ProfileProvider>(
           create: (_) => ProfileProvider(),
@@ -101,14 +107,14 @@ Future<void> main() async {
 }
 
 class DatingApp extends StatelessWidget {
-  const DatingApp({Key? key}) : super(key: key);
+  const DatingApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return Consumer2<ThemeManager, LanguageProvider>(
+      builder: (context, themeManager, _, child) {
         return MaterialApp(
-          title: 'Malawi Dating',
+          title: context.tr('app_title'),
           debugShowCheckedModeBanner: false,
           // Use themes from ThemeManager
           theme: ThemeManager.lightTheme,
@@ -120,11 +126,11 @@ class DatingApp extends StatelessWidget {
             final scale = Responsive.scale(context);
             return MediaQuery(
               data: media.copyWith(
-                textScaleFactor: media.textScaleFactor * scale,
+                textScaler: TextScaler.linear(scale),
               ),
               child: IconTheme.merge(
                 data: IconThemeData(size: 24 * scale),
-                child: child ?? const SizedBox.shrink(),
+                child: AppLockGate(child: child ?? const SizedBox.shrink()),
               ),
             );
           },

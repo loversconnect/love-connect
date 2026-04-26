@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/theme_manager.dart';
 import 'package:lerolove/Utils/chat_background_manager.dart';
 import 'package:lerolove/Utils/responsive.dart';
 
 class ThemeSettingsScreen extends StatelessWidget {
-  const ThemeSettingsScreen({Key? key}) : super(key: key);
+  const ThemeSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +15,7 @@ class ThemeSettingsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Theme & Wallpaper'),
+        title: Text(context.tr('theme_settings_title')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -23,20 +24,20 @@ class ThemeSettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           // App Theme Section
-          _buildSectionHeader(context, 'App Theme', isDark),
+          _buildSectionHeader(context, context.tr('app_theme'), isDark),
           _buildAppThemeOptions(context),
 
           const Divider(height: 32),
 
           // Chat Wallpaper Section
-          _buildSectionHeader(context, 'Chat Wallpaper', isDark),
+          _buildSectionHeader(context, context.tr('chat_wallpaper'), isDark),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'Choose a background for your chats',
+              context.tr('choose_chat_background'),
               style: TextStyle(
                 fontSize: Responsive.font(context, 14),
-                color: colorScheme.onBackground.withOpacity(0.6),
+                color: colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ),
@@ -57,7 +58,7 @@ class ThemeSettingsScreen extends StatelessWidget {
         title.toUpperCase(),
         style: textTheme.labelLarge?.copyWith(
           fontWeight: FontWeight.w600,
-          color: colorScheme.onBackground.withOpacity(0.6),
+          color: colorScheme.onSurface.withValues(alpha: 0.6),
           letterSpacing: 0.5,
         ),
       ),
@@ -65,133 +66,99 @@ class ThemeSettingsScreen extends StatelessWidget {
   }
 
   Widget _buildAppThemeOptions(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colorScheme = Theme.of(context).colorScheme;
+    final messenger = ScaffoldMessenger.of(context);
 
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         return Column(
           children: [
-            RadioListTile<ThemeMode>(
-              title: Row(
-                children: [
-                  Icon(
-                    Icons.wb_sunny,
-                    size: Responsive.icon(context, 20),
-                    color: const Color(0xFFFFA726),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Light Mode',
-                    style: TextStyle(
-                      color: colorScheme.onBackground,
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: Text(
-                'Bright and clean interface',
-                style: TextStyle(
-                  fontSize: Responsive.font(context, 13),
-                  color: colorScheme.onBackground.withOpacity(0.6),
-                ),
-              ),
+            _buildThemeModeOption(
+              context,
+              icon: Icons.wb_sunny,
+              iconColor: const Color(0xFFFFA726),
+              title: context.tr('light_mode'),
+              subtitle: context.tr('bright_clean_interface'),
               value: ThemeMode.light,
-              groupValue: themeManager.themeMode,
-              activeColor: colorScheme.primary,
-              onChanged: (value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Switched to Light Mode'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
+              current: themeManager.themeMode,
+              onSelected: () {
+                themeManager.setThemeMode(ThemeMode.light);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(context.tr('switched_light_mode')),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               },
             ),
-            RadioListTile<ThemeMode>(
-              title: Row(
-                children: [
-                  Icon(
-                    Icons.nightlight_round,
-                    size: Responsive.icon(context, 20),
-                    color: const Color(0xFF7E57C2),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Dark Mode',
-                    style: TextStyle(
-                      color: colorScheme.onBackground,
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: Text(
-                'Easy on the eyes in low light',
-                style: TextStyle(
-                  fontSize: Responsive.font(context, 13),
-                  color: colorScheme.onBackground.withOpacity(0.6),
-                ),
-              ),
+            _buildThemeModeOption(
+              context,
+              icon: Icons.nightlight_round,
+              iconColor: const Color(0xFF7E57C2),
+              title: context.tr('dark_mode'),
+              subtitle: context.tr('easy_on_eyes'),
               value: ThemeMode.dark,
-              groupValue: themeManager.themeMode,
-              activeColor: colorScheme.primary,
-              onChanged: (value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Switched to Dark Mode'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
+              current: themeManager.themeMode,
+              onSelected: () {
+                themeManager.setThemeMode(ThemeMode.dark);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(context.tr('dark_mode')),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               },
             ),
-            RadioListTile<ThemeMode>(
-              title: Row(
-                children: [
-                  Icon(
-                    Icons.brightness_auto,
-                    size: Responsive.icon(context, 20),
-                    color: const Color(0xFF66BB6A),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'System Default',
-                    style: TextStyle(
-                      color: colorScheme.onBackground,
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: Text(
-                'Follow device settings',
-                style: TextStyle(
-                  fontSize: Responsive.font(context, 13),
-                  color: colorScheme.onBackground.withOpacity(0.6),
-                ),
-              ),
+            _buildThemeModeOption(
+              context,
+              icon: Icons.brightness_auto,
+              iconColor: const Color(0xFF66BB6A),
+              title: context.tr('system_default'),
+              subtitle: context.tr('follow_device_settings'),
               value: ThemeMode.system,
-              groupValue: themeManager.themeMode,
-              activeColor: colorScheme.primary,
-              onChanged: (value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Following System Theme'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
+              current: themeManager.themeMode,
+              onSelected: () {
+                themeManager.setThemeMode(ThemeMode.system);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(context.tr('following_system_theme')),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               },
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildThemeModeOption(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required ThemeMode value,
+    required ThemeMode current,
+    required VoidCallback onSelected,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final selected = current == value;
+    return ListTile(
+      onTap: onSelected,
+      leading: Icon(icon, size: Responsive.icon(context, 20), color: iconColor),
+      title: Text(title, style: TextStyle(color: colorScheme.onSurface)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: Responsive.font(context, 13),
+          color: colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+      trailing: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+        color: selected ? colorScheme.primary : colorScheme.outline,
+      ),
     );
   }
 
@@ -222,7 +189,7 @@ class ThemeSettingsScreen extends StatelessWidget {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      '${ChatBackgrounds.getName(bgType)} wallpaper applied!',
+                      '${_backgroundLabel(context, bgType)} ${context.tr('wallpaper_applied_suffix')}',
                     ),
                     duration: const Duration(seconds: 2),
                     behavior: SnackBarBehavior.floating,
@@ -235,13 +202,13 @@ class ThemeSettingsScreen extends StatelessWidget {
                   border: Border.all(
                     color: isSelected
                         ? colorScheme.primary
-                        : colorScheme.surfaceVariant,
+                        : colorScheme.surfaceContainerHighest,
                     width: isSelected ? 3 : 1.5,
                   ),
                   boxShadow: isSelected
                       ? [
                     BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.3),
+                      color: colorScheme.primary.withValues(alpha: 0.3),
                       blurRadius: 8,
                       spreadRadius: 1,
                     )
@@ -274,7 +241,7 @@ class ThemeSettingsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            'Hey!',
+                            context.tr('sample_hey'),
                             style: TextStyle(
                               fontSize: Responsive.font(context, 9),
                               color: colorScheme.onSurface,
@@ -296,7 +263,7 @@ class ThemeSettingsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            'Hi there!',
+                            context.tr('sample_hi_there'),
                             style: TextStyle(
                               fontSize: Responsive.font(context, 9),
                               color: Colors.white,
@@ -347,12 +314,12 @@ class ThemeSettingsScreen extends StatelessWidget {
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                Colors.black.withOpacity(0.7),
+                                Colors.black.withValues(alpha: 0.7),
                               ],
                             ),
                           ),
                           child: Text(
-                            ChatBackgrounds.getName(bgType),
+                            _backgroundLabel(context, bgType),
                             style: TextStyle(
                               fontSize: Responsive.font(context, 10),
                               color: Colors.white,
@@ -373,5 +340,40 @@ class ThemeSettingsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _backgroundLabel(BuildContext context, ChatBackgroundType type) {
+    switch (type) {
+      case ChatBackgroundType.defaultLight:
+        return context.tr('wallpaper_default_light');
+      case ChatBackgroundType.defaultDark:
+        return context.tr('wallpaper_default_dark');
+      case ChatBackgroundType.whatsappClassic:
+        return context.tr('wallpaper_classic');
+      case ChatBackgroundType.geometric:
+        return context.tr('wallpaper_geometric');
+      case ChatBackgroundType.bubbles:
+        return context.tr('wallpaper_bubbles');
+      case ChatBackgroundType.waves:
+        return context.tr('wallpaper_waves');
+      case ChatBackgroundType.solidGray:
+        return context.tr('wallpaper_solid_gray');
+      case ChatBackgroundType.solidBlack:
+        return context.tr('wallpaper_solid_black');
+      case ChatBackgroundType.solidWhite:
+        return context.tr('wallpaper_solid_white');
+      case ChatBackgroundType.gradientBlue:
+        return context.tr('wallpaper_blue_gradient');
+      case ChatBackgroundType.gradientPurple:
+        return context.tr('wallpaper_purple_gradient');
+      case ChatBackgroundType.gradientGreen:
+        return context.tr('wallpaper_green_gradient');
+      case ChatBackgroundType.gradientOrange:
+        return context.tr('wallpaper_orange_gradient');
+      case ChatBackgroundType.dots:
+        return context.tr('wallpaper_dots');
+      case ChatBackgroundType.stripes:
+        return context.tr('wallpaper_stripes');
+    }
   }
 }

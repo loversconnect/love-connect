@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class DiscoveryPreferences {
   const DiscoveryPreferences({
     this.interestedIn = 'Everyone',
@@ -111,6 +109,7 @@ class UserProfile {
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'firstName': firstName,
       'lastName': lastName,
       'age': age,
@@ -121,44 +120,11 @@ class UserProfile {
       'photoUrls': photoUrls,
       'isOnline': isOnline,
       'isVerified': isVerified,
-      'lastSeen': lastSeen == null ? null : Timestamp.fromDate(lastSeen!),
+      'lastSeen': lastSeen?.toIso8601String(),
       'preferences': preferences.toMap(),
       'location': {'lat': latitude, 'lng': longitude},
       'role': role,
-      'updatedAt': FieldValue.serverTimestamp(),
     };
-  }
-
-  factory UserProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? <String, dynamic>{};
-    final location =
-        (data['location'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-
-    return UserProfile(
-      id: doc.id,
-      firstName: (data['firstName'] as String?) ?? '',
-      lastName: (data['lastName'] as String?) ?? '',
-      age: (data['age'] as num?)?.toInt() ?? 0,
-      gender: (data['gender'] as String?) ?? 'Other',
-      phoneNumber: (data['phoneNumber'] as String?) ?? '',
-      bio: (data['bio'] as String?) ?? '',
-      interests: ((data['interests'] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toList(growable: false),
-      photoUrls: ((data['photoUrls'] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toList(growable: false),
-      isOnline: (data['isOnline'] as bool?) ?? false,
-      isVerified: (data['isVerified'] as bool?) ?? false,
-      lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
-      latitude: (location['lat'] as num?)?.toDouble(),
-      longitude: (location['lng'] as num?)?.toDouble(),
-      preferences: DiscoveryPreferences.fromMap(
-        data['preferences'] as Map<String, dynamic>?,
-      ),
-      role: (data['role'] as String?) ?? 'user',
-    );
   }
 
   UserProfile copyWith({

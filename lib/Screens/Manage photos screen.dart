@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/face_match_validator.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -42,7 +43,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     if (index > 0 && _photos[0] == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please set your main selfie first.')),
+        SnackBar(content: Text(context.tr('main_selfie_first'))),
       );
       return;
     }
@@ -79,8 +80,8 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
         SnackBar(
           content: Text(
             index == 0
-                ? 'Could not open front camera. Please allow camera permission.'
-                : 'Could not open gallery. Please check permissions.',
+                ? context.tr('camera_permission_error')
+                : context.tr('gallery_permission_error'),
           ),
         ),
       );
@@ -103,7 +104,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
         reference: _selfieReference,
       );
       if (!result.success) {
-        return result.message ?? 'Face verification failed.';
+        return result.message ?? context.tr('face_verification_failed');
       }
 
       if (isSelfieSlot && result.signature != null) {
@@ -113,7 +114,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
 
       return null;
     } catch (_) {
-      return 'Face check failed. Please retake the photo.';
+      return context.tr('face_check_failed');
     } finally {
       if (mounted) {
         setState(() {
@@ -124,17 +125,26 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
   }
 
   void _removePhoto(int index) {
+    if (index == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('main_selfie_cannot_delete'))),
+      );
+      return;
+    }
     setState(() {
       _photos[index] = null;
       _hasChanges = true;
-      if (index == 0) {
-        _selfieReference = null;
-        FaceMatchValidator.clearSelfieSignature();
-      }
     });
   }
 
   Future<void> _saveChanges() async {
+    if (_photos[0] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('main_selfie_required'))),
+      );
+      return;
+    }
+
     final cleaned = _photos.whereType<String>().toList(growable: false);
     final profileProvider = context.read<ProfileProvider>();
     await profileProvider.updateProfile(photoUrls: cleaned);
@@ -142,13 +152,15 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
     if (profileProvider.error != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
+      ).showSnackBar(
+        SnackBar(content: Text(context.trError(profileProvider.error!))),
+      );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Photos updated successfully'),
+      SnackBar(
+        content: Text(context.tr('photos_updated')),
         duration: Duration(seconds: 2),
       ),
     );
@@ -159,19 +171,38 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
   }
 
   void _showDeleteConfirmation(int index) {
+    if (index == 0) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text(context.tr('main_selfie_protected')),
+            content: Text(context.tr('main_selfie_protected_desc')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(context.tr('ok')),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Delete Photo'),
-          content: const Text('Are you sure you want to delete this photo?'),
+          title: Text(context.tr('delete_photo')),
+          content: Text(context.tr('delete_photo_confirm')),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(context.tr('cancel')),
             ),
             TextButton(
               onPressed: () {
@@ -179,7 +210,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 _removePhoto(index);
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              child: Text(context.tr('delete')),
             ),
           ],
         );
@@ -206,7 +237,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
             }
           },
         ),
-        title: const Text('Manage Photos'),
+        title: Text(context.tr('manage_photos_title')),
         actions: [
           if (_hasChanges)
             TextButton(
@@ -217,7 +248,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save'),
+                  : Text(context.tr('save')),
             ),
         ],
       ),
@@ -234,7 +265,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Validating face...',
+                  context.tr('validating_face'),
                   style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurface.withOpacity(0.65),
                   ),
@@ -268,7 +299,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Photo Tips',
+                            context.tr('photo_tips'),
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               fontSize: Responsive.font(context, 15),
@@ -276,7 +307,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Main selfie must be your real face (slot 1). Other photos must match your verified selfie. Long-press any photo to remove it.',
+                            context.tr('photo_tips_desc'),
                             style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onBackground.withOpacity(0.7),
                               height: 1.4,
@@ -294,7 +325,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Your Photos',
+                    context.tr('your_photos'),
                     style: textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       fontSize: Responsive.font(context, 20),
@@ -326,7 +357,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'At least 1 photo required',
+                context.tr('at_least_one_photo'),
                 style: textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onBackground.withOpacity(0.6),
                   fontSize: Responsive.font(context, 14),
@@ -347,9 +378,20 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                   final hasPhoto = _photos[index] != null;
 
                   return GestureDetector(
-                    onTap: () => hasPhoto ? null : _addPhoto(index),
-                    onLongPress: () =>
-                        hasPhoto ? _showDeleteConfirmation(index) : null,
+                    onTap: () {
+                      if (!hasPhoto) {
+                        _addPhoto(index);
+                        return;
+                      }
+                      if (index == 0) {
+                        _addPhoto(0);
+                        return;
+                      }
+                      _showReplacePhotoOptions(index);
+                    },
+                    onLongPress: () => hasPhoto && index > 0
+                        ? _showDeleteConfirmation(index)
+                        : null,
                     child: Container(
                       decoration: BoxDecoration(
                         color: hasPhoto
@@ -379,7 +421,9 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                                   top: 4,
                                   right: 4,
                                   child: GestureDetector(
-                                    onTap: () => _showDeleteConfirmation(index),
+                                    onTap: () => index == 0
+                                        ? _addPhoto(0)
+                                        : _showDeleteConfirmation(index),
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       decoration: const BoxDecoration(
@@ -387,7 +431,9 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
-                                        Icons.close,
+                                        index == 0
+                                            ? Icons.camera_alt
+                                            : Icons.close,
                                         size: Responsive.icon(context, 16),
                                         color: Colors.white,
                                       ),
@@ -409,7 +455,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        'Main Photo',
+                                        context.tr('main_photo'),
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: Colors.white,
@@ -457,7 +503,9 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  index == 0 ? 'Selfie' : 'Add Photo',
+                                  index == 0
+                                      ? context.tr('selfie')
+                                      : context.tr('add_photo'),
                                   style: textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onBackground.withOpacity(
                                       0.6,
@@ -493,7 +541,7 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Photo Guidelines',
+                          context.tr('photo_guidelines'),
                           style: textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: colorScheme.primary,
@@ -503,14 +551,13 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _buildGuideline('✓ Use clear, recent photos of yourself'),
-                    _buildGuideline('✓ Show your face clearly'),
-                    _buildGuideline(
-                      '✓ Include variety (close-up, full body, activities)',
-                    ),
-                    _buildGuideline('✗ No group photos as main photo'),
-                    _buildGuideline('✗ No sunglasses covering your face'),
-                    _buildGuideline('✗ No inappropriate or offensive content'),
+                    _buildGuideline('✓ ${context.tr('guide_clear_recent')}'),
+                    _buildGuideline('✓ ${context.tr('guide_show_face')}'),
+                    _buildGuideline('✓ ${context.tr('guide_variety')}'),
+                    _buildGuideline('✗ ${context.tr('guide_no_group_main')}'),
+                    _buildGuideline('✗ ${context.tr('guide_no_sunglasses')}'),
+                    _buildGuideline('✗ ${context.tr('guide_no_offensive')}'),
+                    _buildGuideline('✓ ${context.tr('guide_main_selfie_protected')}'),
                   ],
                 ),
               ),
@@ -518,6 +565,43 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showReplacePhotoOptions(int index) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text(context.tr('replace_photo')),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _addPhoto(index);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  context.tr('delete_photo'),
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showDeleteConfirmation(index);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -559,10 +643,8 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Unsaved Changes'),
-          content: const Text(
-            'You have unsaved changes. Do you want to save before leaving?',
-          ),
+          title: Text(context.tr('unsaved_changes')),
+          content: Text(context.tr('unsaved_changes_confirm')),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -572,14 +654,14 @@ class _ManagePhotosScreenState extends State<ManagePhotosScreen> {
                 Navigator.of(context).pop();
                 Navigator.of(context).pop();
               },
-              child: const Text('Discard'),
+              child: Text(context.tr('discard')),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _saveChanges();
               },
-              child: const Text('Save'),
+              child: Text(context.tr('save')),
             ),
           ],
         );

@@ -762,6 +762,18 @@ class BackendApi {
     );
   }
 
+  Future<void> unmatch({
+    required String token,
+    required String peerUserId,
+  }) async {
+    final response = await _post(
+      _uri('/swipes/unmatch'),
+      headers: _headers(token: token),
+      body: jsonEncode({'peerUserId': peerUserId}),
+    );
+    _ensureSuccess(response, fallback: 'Failed to unmatch');
+  }
+
   Future<List<MatchSummaryDto>> myMatches({required String token}) async {
     final response = await _get(
       _uri('/swipes/matches'),

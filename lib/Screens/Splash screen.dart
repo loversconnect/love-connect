@@ -7,6 +7,7 @@ import 'package:lerolove/Screens/Profile%20basics%20screen.dart';
 import 'package:lerolove/Screens/Welcome%20screen.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'dart:async';
 
@@ -137,16 +138,18 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ],
                     ),
-                    child: Icon(
-                      Icons.favorite,
-                      size: Responsive.icon(context, 60),
-                      color: colorScheme.primary,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Image.asset(
+                        'assets/icons/app_icon.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
                   // App Name
                   Text(
-                    'LoversConnect',
+                    context.tr('app_name'),
                     style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: colorScheme.onPrimary,
@@ -156,7 +159,7 @@ class _SplashScreenState extends State<SplashScreen>
                   const SizedBox(height: 8),
                   // Tagline
                   Text(
-                    'Find love with confidence',
+                    context.tr('splash_tagline'),
                     style: textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onPrimary.withOpacity(0.8),
                       letterSpacing: 0.4,

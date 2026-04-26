@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class MatchThread {
   const MatchThread({
     required this.id,
@@ -24,29 +22,6 @@ class MatchThread {
   final String? peerPhotoUrl;
 
   int unreadFor(String userId) => unreadCounts[userId] ?? 0;
-
-  factory MatchThread.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? <String, dynamic>{};
-    final unreadRaw =
-        (data['unreadCounts'] as Map<String, dynamic>?) ??
-        const <String, dynamic>{};
-
-    return MatchThread(
-      id: doc.id,
-      userIds: ((data['userIds'] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toList(growable: false),
-      lastMessage: (data['lastMessage'] as String?) ?? '',
-      lastMessageAt: (data['lastMessageAt'] as Timestamp?)?.toDate(),
-      lastSenderId: data['lastSenderId'] as String?,
-      unreadCounts: unreadRaw.map(
-        (key, value) => MapEntry(key, (value as num).toInt()),
-      ),
-      isActive: (data['isActive'] as bool?) ?? true,
-      peerName: data['peerName'] as String?,
-      peerPhotoUrl: data['peerPhotoUrl'] as String?,
-    );
-  }
 
   factory MatchThread.fromJson(Map<String, dynamic> json) {
     return MatchThread(
@@ -108,6 +83,20 @@ class MatchThread {
   }
 }
 
+class MatchPrompt {
+  const MatchPrompt({
+    required this.matchId,
+    required this.peerUserId,
+    required this.peerName,
+    this.peerPhotoUrl,
+  });
+
+  final String matchId;
+  final String peerUserId;
+  final String peerName;
+  final String? peerPhotoUrl;
+}
+
 class ChatMessageModel {
   const ChatMessageModel({
     required this.id,
@@ -129,17 +118,6 @@ class ChatMessageModel {
 
   bool get isRead => readAt != null;
   bool get isDelivered => !isPending && !isFailed;
-
-  factory ChatMessageModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? <String, dynamic>{};
-    return ChatMessageModel(
-      id: doc.id,
-      senderId: (data['senderId'] as String?) ?? '',
-      text: (data['text'] as String?) ?? '',
-      sentAt: (data['sentAt'] as Timestamp?)?.toDate(),
-      readAt: (data['readAt'] as Timestamp?)?.toDate(),
-    );
-  }
 
   ChatMessageModel copyWith({
     String? id,
@@ -172,13 +150,4 @@ class BlockedUser {
   final String userId;
   final String name;
   final DateTime? blockedAt;
-
-  factory BlockedUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? <String, dynamic>{};
-    return BlockedUser(
-      userId: doc.id,
-      name: (data['name'] as String?) ?? 'Unknown',
-      blockedAt: (data['blockedAt'] as Timestamp?)?.toDate(),
-    );
-  }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:provider/provider.dart';
@@ -58,7 +59,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('You can select up to $_maxInterests interests'),
+              content: Text(
+                '${context.tr('select_up_to_interests')} $_maxInterests ${context.tr('interests').toLowerCase()}',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -70,9 +73,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void _saveProfile() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Name cannot be empty'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(context.tr('name_empty')),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -93,9 +96,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Profile updated successfully'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(context.tr('profile_updated')),
+        duration: const Duration(seconds: 2),
       ),
     );
 
@@ -116,7 +119,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: Text(context.tr('edit_profile_title')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -135,7 +138,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             TextButton(
               onPressed: _saveProfile,
               child: Text(
-                'Save',
+                context.tr('save'),
                 style: TextStyle(
                   fontSize: Responsive.font(context, 16),
                   fontWeight: FontWeight.w600,
@@ -151,7 +154,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             // Name Field
             Text(
-              'Display Name',
+              context.tr('display_name'),
               style: textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
                 fontSize: Responsive.font(context, 16),
@@ -160,9 +163,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                hintText: 'Enter your name',
-              ),
+              decoration: InputDecoration(hintText: context.tr('enter_your_name')),
               textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 32),
@@ -171,7 +172,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Bio',
+                  context.tr('bio'),
                   style: textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     fontSize: Responsive.font(context, 16),
@@ -191,8 +192,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _bioController,
-              decoration: const InputDecoration(
-                hintText: 'Tell us about yourself...',
+              decoration: InputDecoration(
+                hintText: context.tr('bio_hint'),
                 alignLabelWithHint: true,
               ),
               maxLines: 5,
@@ -208,7 +209,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Interests',
+                  context.tr('interests'),
                   style: textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     fontSize: Responsive.font(context, 16),
@@ -225,7 +226,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Select up to $_maxInterests interests',
+              '${context.tr('select_up_to_interests')} $_maxInterests ${context.tr('interests').toLowerCase()}',
               style: textTheme.bodySmall?.copyWith(
                 color: colorScheme.onBackground.withOpacity(0.6),
                 fontSize: Responsive.font(context, 13),
@@ -291,7 +292,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Changes to your profile will be visible to other users immediately.',
+                      context.tr('changes_visible_now'),
                       style: textTheme.bodySmall?.copyWith(
                         color: colorScheme.onBackground.withOpacity(0.7),
                         height: 1.4,

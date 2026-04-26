@@ -11,6 +11,7 @@ import 'package:lerolove/models/user_profile.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,6 +29,7 @@ class _DiscoverTabState extends State<DiscoverTab>
   AnimationController? _swipeController;
   Animation<double>? _swipeAnimation;
   bool _isAnimatingOut = false;
+  bool _isViewingProfileDetails = false;
   String? _actionChipLabel;
   Timer? _actionChipTimer;
   String? _lastPrecachedImage;
@@ -151,38 +153,48 @@ class _DiscoverTabState extends State<DiscoverTab>
             peerUserId: peerId,
             peerName: peerName,
             peerPhotoUrl: peerPhoto,
+            queuePrompt: false,
           );
-          _showActionChip('Updated');
+          context.read<MatchesProvider>().markMatchPromptShown(matchId);
+          _showActionChip(context.tr('saved'));
           _showMessagePrompt(currentProfile, matchId);
         } else {
           final errorText = discovery.error;
           if (errorText != null && errorText.trim().isNotEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(errorText),
+                content: Text(context.trError(errorText)),
                 backgroundColor: Colors.redAccent,
               ),
             );
             return;
           }
-          _showActionChip('Sent');
+          _showActionChip(context.tr('saved'));
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Like sent to ${currentProfile.name}'),
+              content: Text(
+                '${context.tr('like_sent_to_prefix')} ${currentProfile.name}',
+              ),
               duration: const Duration(milliseconds: 1400),
             ),
           );
         }
       });
     } else {
-      _showActionChip('Updated');
+      _showActionChip(context.tr('saved'));
       discovery.passProfile(currentProfile.id);
     }
   }
 
   Future<void> _openProfileDetail(UserProfile profile) async {
     final discovery = context.read<DiscoveryProvider>();
+    final existingMatch = context.read<MatchesProvider>().matchForPeer(
+      profile.id,
+    );
     _dismissSwipeHint();
+    setState(() {
+      _isViewingProfileDetails = true;
+    });
     final action = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -193,11 +205,18 @@ class _DiscoverTabState extends State<DiscoverTab>
               ? 0
               : discovery.distanceFromCurrent(profile).round(),
           bio: profile.bio,
+          userId: profile.id,
+          matchId: existingMatch?.id,
           isOnline: profile.isOnline,
           photos: profile.photoUrls,
         ),
       ),
     );
+    if (mounted) {
+      setState(() {
+        _isViewingProfileDetails = false;
+      });
+    }
 
     if (!mounted || action == null) return;
     _onSwipe(action);
@@ -234,14 +253,14 @@ class _DiscoverTabState extends State<DiscoverTab>
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "It's a Match!",
+                    context.tr('its_a_match'),
                     style: textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'You and ${profile.name} liked each other. Start a conversation now?',
+                    '${context.tr('match_prompt_liked_each_other')} ${profile.name} ${context.tr('match_prompt_start_chat')}',
                     textAlign: TextAlign.center,
                     style: textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onBackground.withOpacity(0.7),
@@ -282,7 +301,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Keep Swiping'),
+                          child: Text(context.tr('keep_swiping')),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -310,7 +329,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Message Now'),
+                          child: Text(context.tr('message_now')),
                         ),
                       ),
                     ],
@@ -358,19 +377,23 @@ class _DiscoverTabState extends State<DiscoverTab>
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(
-              Icons.favorite,
-              color: colorScheme.primary,
-              size: Responsive.icon(context, 28),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/icons/app_icon.png',
+                width: Responsive.icon(context, 28),
+                height: Responsive.icon(context, 28),
+                fit: BoxFit.cover,
+              ),
             ),
             const SizedBox(width: 8),
-            const Text('LoversConnect'),
+            Text(context.tr('app_name')),
           ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.tune),
-            tooltip: 'Discovery Settings',
+            tooltip: context.tr('discovery_settings'),
             onPressed: _openDiscoverySettings,
           ),
         ],
@@ -508,7 +531,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                                               ),
                                               const SizedBox(width: 8),
                                               Text(
-                                                'Swipe right to Like · left to Pass',
+                                                context.tr('swipe_right_like_left_pass'),
                                                 style: TextStyle(
                                                   fontSize: Responsive.font(
                                                     context,
@@ -552,8 +575,8 @@ class _DiscoverTabState extends State<DiscoverTab>
                                             ),
                                             child: Text(
                                               _dragDistance > 0
-                                                  ? 'LIKE'
-                                                  : 'NOPE',
+                                                  ? context.tr('like_big')
+                                                  : context.tr('nope_big'),
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: Responsive.font(
@@ -569,78 +592,82 @@ class _DiscoverTabState extends State<DiscoverTab>
                                       ),
                                     ),
                                   ),
-                                Positioned(
-                                  bottom: 40,
-                                  left: 0,
-                                  right: 0,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (_actionChipLabel != null)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 8,
+                                if (!_isViewingProfileDetails)
+                                  Positioned(
+                                    bottom: 40,
+                                    left: 0,
+                                    right: 0,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (_actionChipLabel != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: _buildActionChip(
+                                              _actionChipLabel!,
+                                            ),
                                           ),
-                                          child: _buildActionChip(
-                                            _actionChipLabel!,
-                                          ),
-                                        ),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          _buildActionButton(
-                                            icon: Icons.close,
-                                            color: Colors.red,
-                                            onTap: () => _onSwipe(false),
-                                            size: Responsive.icon(context, 60),
-                                            label: 'Pass',
-                                          ),
-                                          const SizedBox(width: 40),
-                                          matchesProvider.hasActiveMatchWith(
-                                                profiles.first.id,
-                                              )
-                                              ? _buildActionButton(
-                                                  icon: Icons.chat_bubble,
-                                                  color: colorScheme.primary,
-                                                  onTap: () =>
-                                                      _openChatForProfile(
-                                                        profiles.first,
-                                                      ),
-                                                  size: Responsive.icon(
-                                                    context,
-                                                    70,
-                                                  ),
-                                                  label: 'Message',
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            _buildActionButton(
+                                              icon: Icons.close,
+                                              color: Colors.red,
+                                              onTap: () => _onSwipe(false),
+                                              size: Responsive.icon(
+                                                context,
+                                                60,
+                                              ),
+                                              label: context.tr('pass'),
+                                            ),
+                                            const SizedBox(width: 40),
+                                            matchesProvider.hasActiveMatchWith(
+                                                  profiles.first.id,
                                                 )
-                                              : _buildActionButton(
-                                                  icon: Icons.favorite,
-                                                  color: colorScheme.primary,
-                                                  onTap: () => _onSwipe(true),
-                                                  size: Responsive.icon(
-                                                    context,
-                                                    70,
+                                                ? _buildActionButton(
+                                                    icon: Icons.chat_bubble,
+                                                    color: colorScheme.primary,
+                                                    onTap: () =>
+                                                        _openChatForProfile(
+                                                          profiles.first,
+                                                        ),
+                                                    size: Responsive.icon(
+                                                      context,
+                                                      70,
+                                                    ),
+                                                    label: context.tr('message'),
+                                                  )
+                                                : _buildActionButton(
+                                                    icon: Icons.favorite,
+                                                    color: colorScheme.primary,
+                                                    onTap: () => _onSwipe(true),
+                                                    size: Responsive.icon(
+                                                      context,
+                                                      70,
+                                                    ),
+                                                    label: context.tr('like_big'),
                                                   ),
-                                                  label: 'Like',
-                                                ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Tap or swipe',
-                                        style: TextStyle(
-                                          fontSize: Responsive.font(
-                                            context,
-                                            12,
-                                          ),
-                                          color: colorScheme.onSurface
-                                              .withOpacity(0.6),
-                                          fontWeight: FontWeight.w600,
+                                          ],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          context.tr('tap_or_swipe'),
+                                          style: TextStyle(
+                                            fontSize: Responsive.font(
+                                              context,
+                                              12,
+                                            ),
+                                            color: colorScheme.onSurface
+                                                .withOpacity(0.6),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -675,7 +702,7 @@ class _DiscoverTabState extends State<DiscoverTab>
 
   Future<void> _maybeShowLocationHint(String? errorText) async {
     if (_locationHintShownThisRun) return;
-    if (errorText == null || !errorText.toLowerCase().contains('location')) {
+    if (!AppI18n.isLocationError(errorText)) {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
@@ -685,8 +712,8 @@ class _DiscoverTabState extends State<DiscoverTab>
     await prefs.setBool('hint_location_required_shown', true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Turn on location so nearby people can find you.'),
+      SnackBar(
+        content: Text(context.tr('discover_location_hint')),
         duration: Duration(seconds: 3),
       ),
     );
@@ -715,8 +742,8 @@ class _DiscoverTabState extends State<DiscoverTab>
   Widget _buildOfflineBanner(int queuedCount) {
     final colorScheme = Theme.of(context).colorScheme;
     final queuedText = queuedCount > 0
-        ? 'We queued $queuedCount action${queuedCount == 1 ? '' : 's'}.'
-        : 'We will sync when back online.';
+        ? '${context.tr('queued_actions_prefix')} $queuedCount ${queuedCount == 1 ? context.tr('queued_action_single') : context.tr('queued_action_plural')}'
+        : context.tr('offline_sync');
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -726,12 +753,47 @@ class _DiscoverTabState extends State<DiscoverTab>
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        'You are offline. $queuedText',
+        queuedCount > 0 ? '${context.tr('offline_sync')} $queuedText' : queuedText,
         style: TextStyle(
           color: colorScheme.onErrorContainer,
           fontWeight: FontWeight.w600,
           fontSize: Responsive.font(context, 12),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSyncingChip() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            context.tr('syncing'),
+            style: TextStyle(
+              color: colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.w700,
+              fontSize: Responsive.font(context, 11),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -743,40 +805,48 @@ class _DiscoverTabState extends State<DiscoverTab>
       child: Row(
         children: [
           ChoiceChip(
-            label: const Text('Nearby First'),
+            label: Text(
+              context.tr('nearby_first'),
+              style: TextStyle(
+                color: discovery.discoverSortMode == DiscoverSortMode.nearby
+                    ? Colors.white
+                    : colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             selected: discovery.discoverSortMode == DiscoverSortMode.nearby,
             showCheckmark: true,
             checkmarkColor: colorScheme.onPrimary,
-            onSelected: (_) => discovery.updateDiscoverySettings(
-              interestedInValue: discovery.interestedIn,
-              ageRangeValue: discovery.ageRange,
-              maxDistanceKmValue: discovery.maxDistanceKm,
-              showOnlineOnlyValue: discovery.showOnlineOnly,
-              verifiedProfilesOnlyValue: discovery.verifiedProfilesOnly,
-              discoverSortModeValue: DiscoverSortMode.nearby,
-            ),
+            onSelected: (_) => discovery.setSortMode(DiscoverSortMode.nearby),
           ),
           const SizedBox(width: 10),
           ChoiceChip(
-            label: const Text('Best Relation'),
+            label: Text(
+              context.tr('best_relation'),
+              style: TextStyle(
+                color: discovery.discoverSortMode == DiscoverSortMode.bestMatch
+                    ? Colors.white
+                    : colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             selected: discovery.discoverSortMode == DiscoverSortMode.bestMatch,
             showCheckmark: true,
             checkmarkColor: colorScheme.onPrimary,
-            onSelected: (_) => discovery.updateDiscoverySettings(
-              interestedInValue: discovery.interestedIn,
-              ageRangeValue: discovery.ageRange,
-              maxDistanceKmValue: discovery.maxDistanceKm,
-              showOnlineOnlyValue: discovery.showOnlineOnly,
-              verifiedProfilesOnlyValue: discovery.verifiedProfilesOnly,
-              discoverSortModeValue: DiscoverSortMode.bestMatch,
-            ),
+            onSelected: (_) =>
+                discovery.setSortMode(DiscoverSortMode.bestMatch),
           ),
           const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              if (discovery.isSyncing)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _buildSyncingChip(),
+                ),
               Text(
-                '${discovery.estimatedMatches} nearby',
+                '${discovery.estimatedMatches} ${context.tr('nearby_count_suffix')}',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 13),
                   fontWeight: FontWeight.w600,
@@ -848,7 +918,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      '$score% relation',
+                      '$score% ${context.tr('relation_suffix')}',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: Responsive.font(context, 12),
@@ -877,7 +947,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Matched',
+                            context.tr('matched'),
                             style: TextStyle(
                               color: colorScheme.primary,
                               fontSize: Responsive.font(context, 12),
@@ -937,10 +1007,11 @@ class _DiscoverTabState extends State<DiscoverTab>
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${profile.age}',
+                          '${context.tr('age_prefix')} ${profile.age}',
                           style: TextStyle(
-                            fontSize: Responsive.font(context, 24),
+                            fontSize: Responsive.font(context, 18),
                             color: Colors.white,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         if (profile.isOnline) ...[
@@ -967,8 +1038,8 @@ class _DiscoverTabState extends State<DiscoverTab>
                         const SizedBox(width: 4),
                         Text(
                           hiddenDistance
-                              ? 'Distance hidden'
-                              : '$distance km away',
+                              ? context.tr('distance_hidden')
+                              : '$distance ${context.tr('km_away_suffix')}',
                           style: TextStyle(
                             fontSize: Responsive.font(context, 15),
                             color: Colors.white70,
@@ -1039,7 +1110,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                       child: FilledButton.icon(
                         onPressed: () => _openChatForProfile(profile),
                         icon: const Icon(Icons.chat_bubble_outline),
-                        label: const Text('Message'),
+                        label: Text(context.tr('message')),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -1151,10 +1222,10 @@ class _DiscoverTabState extends State<DiscoverTab>
           const SizedBox(height: 16),
           Text(
             hasError
-                ? 'Discovery Needs Location'
+                ? context.tr('discovery_needs_location')
                 : filteredOutBySettings
-                ? 'Filters are hiding nearby people'
-                : 'No more nearby profiles',
+                ? context.tr('no_new_profiles_title')
+                : context.tr('no_more_profiles_title'),
             style: TextStyle(
               fontSize: Responsive.font(context, 20),
               fontWeight: FontWeight.w600,
@@ -1166,8 +1237,8 @@ class _DiscoverTabState extends State<DiscoverTab>
             hasError
                 ? errorText
                 : filteredOutBySettings
-                ? 'We found nearby profiles, but your current age, distance, or interest filters are excluding them.'
-                : 'Try expanding your distance or age range',
+                ? context.tr('no_profiles_fit_preferences')
+                : context.tr('no_profiles_subtitle'),
             style: TextStyle(
               fontSize: Responsive.font(context, 15),
               color: Colors.grey[500],
@@ -1179,7 +1250,7 @@ class _DiscoverTabState extends State<DiscoverTab>
             onPressed: () =>
                 context.read<DiscoveryProvider>().refreshProfiles(),
             icon: const Icon(Icons.refresh),
-            label: const Text('Reload Nearby'),
+            label: Text(context.tr('reload_nearby')),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
@@ -1191,7 +1262,7 @@ class _DiscoverTabState extends State<DiscoverTab>
                   .read<DiscoveryProvider>()
                   .resetFiltersToBroadDefaults(),
               icon: const Icon(Icons.tune),
-              label: const Text('Expand Filters'),
+              label: Text(context.tr('try_broader_search')),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -1214,16 +1285,16 @@ class _DiscoverTabState extends State<DiscoverTab>
     final List<String> reasons = <String>[];
     final sharedInterests = discovery.sharedInterestCount(profile);
     if (sharedInterests > 0) {
-      reasons.add('$sharedInterests shared interests');
+      reasons.add('$sharedInterests ${context.tr('shared_interests')}');
     }
     if (!hiddenDistance && distance <= 10) {
-      reasons.add('Near you');
+      reasons.add(context.tr('near_you'));
     }
     if (profile.isOnline) {
-      reasons.add('Recently active');
+      reasons.add(context.tr('recently_active'));
     }
     if (reasons.isEmpty) {
-      reasons.add('Within your filters');
+      reasons.add(context.tr('within_filters'));
     }
     return reasons
         .take(2)

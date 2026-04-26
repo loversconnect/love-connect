@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lerolove/Screens/Add%20photos%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
 import 'package:lerolove/Screens/Preferences%20screen.dart';
@@ -94,7 +95,13 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? 'Invalid verification code')),
+        SnackBar(
+          content: Text(
+            auth.error != null
+                ? context.trError(auth.error!)
+                : context.tr('invalid_verification_code'),
+          ),
+        ),
       );
       return;
     }
@@ -130,17 +137,18 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
           if (ok) {
             _startResendTimer();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Verification code sent'),
-                duration: Duration(seconds: 2),
+              SnackBar(
+                content: Text(context.tr('verification_code_sent')),
+                duration: const Duration(seconds: 2),
               ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  context.read<AuthProvider>().error ??
-                      'Failed to resend verification code',
+                  context.read<AuthProvider>().error != null
+                      ? context.trError(context.read<AuthProvider>().error!)
+                      : context.tr('failed_resend_code'),
                 ),
               ),
             );
@@ -195,7 +203,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Verification',
+                    context.tr('verification'),
                     style: textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -205,7 +213,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               const SizedBox(height: 16),
               // Title
               Text(
-                'Enter Verification Code',
+                context.tr('enter_verification_code'),
                 style: textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   fontSize: Responsive.font(context, 28),
@@ -214,7 +222,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
               const SizedBox(height: 8),
               // Subtitle
               Text(
-                'We sent a code to ${widget.phoneNumber}',
+                '${context.tr('we_sent_code_to')} ${widget.phoneNumber}',
                 style: textTheme.bodyLarge?.copyWith(
                   color: colorScheme.onBackground.withOpacity(0.7),
                   fontSize: Responsive.font(context, 15),
@@ -285,8 +293,8 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                   onPressed: _canResend ? _resendCode : null,
                   child: Text(
                     _canResend
-                        ? 'Resend Code'
-                        : 'Resend code in ${_resendTimer}s',
+                        ? context.tr('resend_code')
+                        : '${context.tr('resend_in')} ${_resendTimer}s',
                     style: textTheme.bodyLarge?.copyWith(
                       color: _canResend
                           ? colorScheme.primary

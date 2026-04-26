@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Add%20photos%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -22,7 +23,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
   String? _selectedGender;
   bool _isValid = false;
 
-  final List<String> _genders = ['Male', 'Female', 'Other'];
+  final List<String> _genders = ['male', 'female', 'other'];
 
   void _validateForm() {
     setState(() {
@@ -85,7 +86,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
         age: age,
-        gender: _selectedGender ?? 'Other',
+        gender: (_selectedGender ?? context.tr('other')).toUpperCase(),
         phoneNumber: auth.currentPhoneNumber ?? '',
         birthDate: _selectedDate,
       );
@@ -94,7 +95,9 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
       if (profileProvider.error != null) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
+        ).showSnackBar(
+          SnackBar(content: Text(context.trError(profileProvider.error!))),
+        );
         return;
       }
 
@@ -120,7 +123,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile Setup'),
+        title: Text(context.tr('profile_setup')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -139,7 +142,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'About You',
+                        context.tr('about_you'),
                         style: textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           fontSize: Responsive.font(context, 28),
@@ -147,7 +150,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tell us a bit about yourself',
+                        context.tr('tell_us_about_you'),
                         style: textTheme.bodyLarge?.copyWith(
                           color: colorScheme.onBackground.withOpacity(0.7),
                           fontSize: Responsive.font(context, 15),
@@ -157,17 +160,17 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                       // First Name
                       TextFormField(
                         controller: _firstNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'First Name',
-                          hintText: 'Enter your first name',
+                        decoration: InputDecoration(
+                          labelText: context.tr('first_name'),
+                          hintText: context.tr('enter_first_name'),
                         ),
                         textCapitalization: TextCapitalization.words,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your first name';
+                            return context.tr('enter_first_name_error');
                           }
                           if (value.length < 2 || value.length > 50) {
-                            return 'Name must be between 2 and 50 characters';
+                            return context.tr('name_length_error');
                           }
                           return null;
                         },
@@ -176,17 +179,17 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                       // Last Name
                       TextFormField(
                         controller: _lastNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Last Name',
-                          hintText: 'Enter your last name',
+                        decoration: InputDecoration(
+                          labelText: context.tr('last_name'),
+                          hintText: context.tr('enter_last_name'),
                         ),
                         textCapitalization: TextCapitalization.words,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Please enter your last name';
+                            return context.tr('enter_last_name_error');
                           }
                           if (value.length < 2 || value.length > 50) {
-                            return 'Name must be between 2 and 50 characters';
+                            return context.tr('name_length_error');
                           }
                           return null;
                         },
@@ -198,22 +201,22 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                         child: AbsorbPointer(
                           child: TextFormField(
                             decoration: InputDecoration(
-                              labelText: 'Date of Birth',
-                              hintText: 'Select your date of birth',
+                              labelText: context.tr('date_of_birth'),
+                              hintText: context.tr('select_date_of_birth'),
                               suffixIcon: const Icon(Icons.calendar_today),
                             ),
                             controller: TextEditingController(
                               text: _selectedDate == null
                                   ? ''
-                                  : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year} (${_calculateAge(_selectedDate!)} years old)',
+                                  : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year} (${_calculateAge(_selectedDate!)} ${context.tr('years_old')})',
                             ),
                             validator: (value) {
                               if (_selectedDate == null) {
-                                return 'Please select your date of birth';
+                                return context.tr('select_birth_date_error');
                               }
                               final age = _calculateAge(_selectedDate!);
                               if (age < 18) {
-                                return 'You must be 18 years or older';
+                                return context.tr('must_be_18');
                               }
                               return null;
                             },
@@ -223,7 +226,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                       const SizedBox(height: 20),
                       // Gender
                       Text(
-                        'Gender',
+                        context.tr('gender'),
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.font(context, 16),
@@ -235,7 +238,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                         children: _genders.map((gender) {
                           final isSelected = _selectedGender == gender;
                           return ChoiceChip(
-                            label: Text(gender),
+                            label: Text(context.tr(gender)),
                             selected: isSelected,
                             onSelected: (selected) {
                               setState(() {
@@ -289,7 +292,7 @@ class _ProfileBasicsScreenState extends State<ProfileBasicsScreen> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text('Continue'),
+                      : Text(context.tr('continue')),
                 ),
               ),
             ),

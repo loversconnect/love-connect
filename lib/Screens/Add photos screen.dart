@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lerolove/Screens/Preferences%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/face_match_validator.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -12,7 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AddPhotosScreen extends StatefulWidget {
-  const AddPhotosScreen({Key? key}) : super(key: key);
+  const AddPhotosScreen({super.key});
 
   @override
   State<AddPhotosScreen> createState() => _AddPhotosScreenState();
@@ -48,16 +49,16 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     await prefs.setBool('hint_selfie_required_shown', true);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Selfie in slot 1 is required for trust and profile safety.',
+          context.tr('selfie_required_trust'),
         ),
         duration: Duration(seconds: 3),
       ),
     );
   }
 
-  bool get _hasMinimumPhotos => _photos.where((p) => p != null).length >= 1;
+  bool get _hasMinimumPhotos => _photos.whereType<String>().isNotEmpty;
   bool get _hasRequiredSelfie => _photos[0] != null;
 
   Future<void> _addPhoto(int index) async {
@@ -66,8 +67,8 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     if (index > 0 && !_hasRequiredSelfie) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please take your main selfie first (slot 1).'),
+        SnackBar(
+          content: Text(context.tr('take_selfie_first_slot1')),
         ),
       );
       return;
@@ -104,8 +105,8 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
         SnackBar(
           content: Text(
             index == 0
-                ? 'Could not open front camera. Please allow camera permission.'
-                : 'Could not open gallery. Please check permissions.',
+                ? context.tr('camera_permission_error')
+                : context.tr('gallery_permission_error'),
           ),
         ),
       );
@@ -116,13 +117,16 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
     required String imagePath,
     required bool isSelfieSlot,
   }) async {
+    final cannotReadSelectedPhoto = context.tr('cannot_read_selected_photo');
+    final faceVerificationFailed = context.tr('face_verification_failed');
+    final faceCheckFailed = context.tr('face_check_failed');
     setState(() {
       _isValidatingFace = true;
     });
 
     try {
       if (!await File(imagePath).exists()) {
-        return 'Could not read selected photo.';
+        return cannotReadSelectedPhoto;
       }
 
       final result = await FaceMatchValidator.validatePhoto(
@@ -132,7 +136,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
         reference: _selfieReference,
       );
       if (!result.success) {
-        return result.message ?? 'Face verification failed.';
+        return result.message ?? faceVerificationFailed;
       }
 
       if (isSelfieSlot && result.signature != null) {
@@ -141,7 +145,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
       }
       return null;
     } catch (_) {
-      return 'Face check failed. Please retake the photo.';
+      return faceCheckFailed;
     } finally {
       if (mounted) {
         setState(() {
@@ -168,14 +172,13 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
       await profileProvider.updateProfile(photoUrls: photos);
       if (!mounted) return;
       if (profileProvider.error != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(profileProvider.error!)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.trError(profileProvider.error!))),
+        );
         return;
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const PreferencesScreen()),
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PreferencesScreen()),
       );
     }
   }
@@ -194,7 +197,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Photos'),
+        title: Text(context.tr('add_photos_title')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -210,7 +213,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Add Your Photos',
+                      context.tr('add_your_photos'),
                       style: textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         fontSize: Responsive.font(context, 28),
@@ -218,9 +221,9 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Main selfie is required first',
+                      context.tr('main_selfie_required_first'),
                       style: textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onBackground.withOpacity(0.7),
+                        color: colorScheme.onSurface.withValues(alpha: 0.7),
                         fontSize: Responsive.font(context, 15),
                       ),
                     ),
@@ -232,9 +235,9 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Validating face...',
+                        context.tr('validating_face'),
                         style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.65),
+                          color: colorScheme.onSurface.withValues(alpha: 0.65),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -260,13 +263,13 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: hasPhoto
-                                  ? colorScheme.secondary.withOpacity(0.15)
+                                  ? colorScheme.secondary.withValues(alpha: 0.15)
                                   : colorScheme.surface,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: hasPhoto
                                     ? colorScheme.primary
-                                    : colorScheme.surfaceVariant,
+                                    : colorScheme.surfaceContainerHighest,
                                 width: 2,
                               ),
                             ),
@@ -317,14 +320,12 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(
-                                                0.6,
-                                              ),
+                                              color: Colors.black.withValues(alpha: 0.6),
                                               borderRadius:
                                                   BorderRadius.circular(4),
                                             ),
                                             child: Text(
-                                              'Main',
+                                              context.tr('main_photo'),
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 color: Colors.white,
@@ -346,14 +347,16 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                                         Icons.add_photo_alternate_outlined,
                                         size: Responsive.icon(context, 40),
                                         color: colorScheme.onSurface
-                                            .withOpacity(0.4),
+                                            .withValues(alpha: 0.4),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        index == 0 ? 'Selfie' : '${index + 1}',
+                                        index == 0
+                                            ? context.tr('selfie')
+                                            : '${index + 1}',
                                         style: textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.onBackground
-                                              .withOpacity(0.6),
+                                          color: colorScheme.onSurface
+                                              .withValues(alpha: 0.6),
                                           fontSize: Responsive.font(
                                             context,
                                             12,
@@ -374,7 +377,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                         color: colorScheme.surface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: colorScheme.secondary.withOpacity(0.25),
+                          color: colorScheme.secondary.withValues(alpha: 0.25),
                         ),
                       ),
                       child: Row(
@@ -387,11 +390,9 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Take a clear selfie in slot 1 first. Then add more photos from gallery. Tap to add, long-press to remove.',
+                              context.tr('take_selfie_first_desc'),
                               style: textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onBackground.withOpacity(
-                                  0.7,
-                                ),
+                                color: colorScheme.onSurface.withValues(alpha: 0.7),
                                 height: 1.4,
                                 fontSize: Responsive.font(context, 13),
                               ),
@@ -421,7 +422,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _hasMinimumPhotos && _hasRequiredSelfie
                             ? colorScheme.primary
-                            : colorScheme.surfaceVariant,
+                            : colorScheme.surfaceContainerHighest,
                         foregroundColor: _hasMinimumPhotos && _hasRequiredSelfie
                             ? colorScheme.onPrimary
                             : colorScheme.onSurface,
@@ -434,7 +435,7 @@ class _AddPhotosScreenState extends State<AddPhotosScreen> {
                                 strokeWidth: 2,
                               ),
                             )
-                          : const Text('Continue'),
+                          : Text(context.tr('continue')),
                     ),
                   ),
                 ],

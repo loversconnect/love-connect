@@ -63,7 +63,10 @@ class PushService {
     await initialize();
 
     final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      debugPrint('PushService: FirebaseMessaging returned no device token.');
+      return;
+    }
     await _registerToken(backendToken, token);
   }
 
@@ -93,7 +96,9 @@ class PushService {
         deviceToken: deviceToken,
         platform: _platformLabel(),
       );
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('PushService: device token registration failed: $error');
+    }
   }
 
   Future<void> _initLocalNotifications() async {
@@ -156,6 +161,13 @@ class PushService {
         message.notification?.body ??
         (message.data['body']?.toString() ?? 'You received a new message.');
 
+    final customRingtoneUri = await MessageAlertService.getRingtoneUri();
+    final useCustomRingtone =
+        !kIsWeb &&
+        Platform.isAndroid &&
+        customRingtoneUri != null &&
+        customRingtoneUri.trim().isNotEmpty;
+
     final androidDetails = AndroidNotificationDetails(
       _messagesChannelId,
       'Messages',
@@ -163,10 +175,10 @@ class PushService {
       importance: Importance.max,
       priority: Priority.high,
       category: AndroidNotificationCategory.message,
-      playSound: false,
+      playSound: !useCustomRingtone,
     );
 
-    const iosDetails = DarwinNotificationDetails(presentSound: false);
+    const iosDetails = DarwinNotificationDetails(presentSound: true);
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
@@ -179,7 +191,9 @@ class PushService {
       details,
     );
 
-    await MessageAlertService.playSelectedRingtone();
+    if (useCustomRingtone) {
+      await MessageAlertService.playSelectedRingtone();
+    }
   }
 
   String _platformLabel() {

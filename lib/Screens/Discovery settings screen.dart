@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/Utils/app_feedback.dart';
@@ -23,9 +24,9 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
   bool _initialized = false;
 
   final List<Map<String, String>> _interestOptions = const [
-    {'label': 'Male', 'value': 'MALE'},
-    {'label': 'Female', 'value': 'FEMALE'},
-    {'label': 'Everyone', 'value': 'Everyone'},
+    {'label': 'male', 'value': 'MALE'},
+    {'label': 'female', 'value': 'FEMALE'},
+    {'label': 'everyone', 'value': 'Everyone'},
   ];
 
   @override
@@ -54,7 +55,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
     if (!mounted) return;
     await AppFeedback.showBottomStatus(
       context,
-      message: 'Discovery settings saved',
+      message: context.tr('discovery_saved'),
     );
     setState(() {
       _hasChanges = false;
@@ -92,13 +93,13 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Discovery Settings'),
+        title: Text(context.tr('discovery_settings_title')),
         actions: [
           if (_hasChanges)
             TextButton(
               onPressed: _saveChanges,
               child: Text(
-                'Save',
+                context.tr('save'),
                 style: TextStyle(
                   fontSize: Responsive.font(context, 16),
                   fontWeight: FontWeight.w600,
@@ -132,7 +133,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Tune nearby people by distance and relation fit.',
+                        context.tr('tune_nearby'),
                         style: textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onBackground.withOpacity(0.7),
                         ),
@@ -143,7 +144,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               ),
               const SizedBox(height: 32),
               Text(
-                'I\'m interested in',
+                context.tr('interested_in'),
                 style: textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   fontSize: Responsive.font(context, 18),
@@ -153,7 +154,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               Wrap(
                 spacing: 12,
                 children: _interestOptions.map((option) {
-                  final label = option['label']!;
+                  final label = context.tr(option['label']!);
                   final value = option['value']!;
                   final isSelected = _interestedIn == value;
                   return ChoiceChip(
@@ -189,7 +190,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Age range',
+                    context.tr('age_range'),
                     style: textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       fontSize: Responsive.font(context, 18),
@@ -240,7 +241,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Maximum distance',
+                    context.tr('max_distance'),
                     style: textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       fontSize: Responsive.font(context, 18),
@@ -256,7 +257,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${_maxDistance.round()} km',
+                      '${_maxDistance.round()} ${context.tr('km_away_suffix')}',
                       style: textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: colorScheme.primary,
@@ -273,7 +274,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                 divisions: 19,
                 activeColor: colorScheme.primary,
                 inactiveColor: colorScheme.surfaceVariant,
-                label: '${_maxDistance.round()} km',
+                label: '${_maxDistance.round()} ${context.tr('km_away_suffix')}',
                 onChanged: (value) {
                   setState(() {
                     _maxDistance = value;
@@ -285,7 +286,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               const Divider(),
               const SizedBox(height: 24),
               Text(
-                'Additional Filters',
+                context.tr('additional_filters'),
                 style: textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   fontSize: Responsive.font(context, 18),
@@ -294,8 +295,8 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Show online only'),
-                subtitle: const Text('Only see people currently active'),
+                title: Text(context.tr('show_online_only')),
+                subtitle: Text(context.tr('show_online_only_sub')),
                 value: _showOnlineOnly,
                 onChanged: (value) {
                   setState(() {
@@ -306,8 +307,8 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Verified profiles only'),
-                subtitle: const Text('Only see verified accounts'),
+                title: Text(context.tr('verified_only')),
+                subtitle: Text(context.tr('verified_only_sub')),
                 value: _verifiedProfilesOnly,
                 onChanged: (value) {
                   setState(() {
@@ -318,7 +319,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
               ),
               const SizedBox(height: 18),
               Text(
-                'Sort discovery by',
+                context.tr('sort_by'),
                 style: textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   fontSize: Responsive.font(context, 16),
@@ -329,7 +330,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                 spacing: 10,
                 children: [
                   ChoiceChip(
-                    label: const Text('Nearby first'),
+                    label: Text(context.tr('nearby_first')),
                     selected: _sortMode == DiscoverSortMode.nearby,
                     showCheckmark: true,
                     checkmarkColor: colorScheme.onPrimary,
@@ -343,13 +344,13 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                     backgroundColor: colorScheme.surfaceVariant,
                     labelStyle: TextStyle(
                       color: _sortMode == DiscoverSortMode.nearby
-                          ? colorScheme.onPrimary
+                          ? Colors.white
                           : colorScheme.onBackground,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   ChoiceChip(
-                    label: const Text('Best relation'),
+                    label: Text(context.tr('best_relation')),
                     selected: _sortMode == DiscoverSortMode.bestMatch,
                     showCheckmark: true,
                     checkmarkColor: colorScheme.onPrimary,
@@ -363,7 +364,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                     backgroundColor: colorScheme.surfaceVariant,
                     labelStyle: TextStyle(
                       color: _sortMode == DiscoverSortMode.bestMatch
-                          ? colorScheme.onPrimary
+                          ? Colors.white
                           : colorScheme.onBackground,
                       fontWeight: FontWeight.w500,
                     ),
@@ -405,7 +406,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Estimated Matches',
+                            context.tr('estimated_matches'),
                             style: textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: colorScheme.onBackground.withOpacity(0.6),
@@ -413,7 +414,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '~$estimated people',
+                            '~$estimated ${context.tr('people_count')}',
                             style: textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: colorScheme.primary,
@@ -422,7 +423,7 @@ class _DiscoverySettingsScreenState extends State<DiscoverySettingsScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'match your preferences',
+                            context.tr('match_pref_suffix'),
                             style: textTheme.bodySmall?.copyWith(
                               color: colorScheme.onBackground.withOpacity(0.6),
                             ),

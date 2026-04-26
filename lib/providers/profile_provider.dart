@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lerolove/models/user_profile.dart';
 import 'package:lerolove/providers/auth_provider.dart';
@@ -9,12 +8,10 @@ import 'package:lerolove/services/backend_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileProvider extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final BackendApi _backendApi = BackendApi();
   static const _localProfilePrefix = 'local_profile_';
 
   AuthProvider? _auth;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSub;
 
   UserProfile? _currentProfile;
   UserProfile? get currentProfile => _currentProfile;
@@ -31,7 +28,6 @@ class ProfileProvider extends ChangeNotifier {
   Timer? _profileSyncRetryTimer;
   _PendingProfileSync? _pendingProfileSync;
 
-  bool _isLocalAuth(String? uid) => uid != null && uid.startsWith('local_');
   String _localProfileKey(String uid) => '$_localProfilePrefix$uid';
 
   void bind(AuthProvider auth) {
@@ -39,8 +35,6 @@ class ProfileProvider extends ChangeNotifier {
     _auth = auth;
     _error = null;
     _isProfileReady = false;
-
-    _profileSub?.cancel();
     _currentProfile = null;
 
     final uid = auth.uid;
@@ -50,35 +44,20 @@ class ProfileProvider extends ChangeNotifier {
       return;
     }
 
-    if (_isLocalAuth(uid)) {
-      _currentProfile = _defaultLocalProfile(
-        uid: uid,
-        phone: auth.currentPhoneNumber ?? '',
-      );
-      notifyListeners();
-      unawaited(
-        _restoreLocalProfile(
-          uid,
-          auth.currentPhoneNumber ?? '',
-        ).then((_) => syncFromBackendIfAvailable()).whenComplete(() {
-          _isProfileReady = true;
-          notifyListeners();
-        }),
-      );
-      return;
-    }
-
-    _profileSub = _firestore.collection('users').doc(uid).snapshots().listen((
-      doc,
-    ) {
-      if (!doc.exists) {
-        _currentProfile = null;
-      } else {
-        _currentProfile = UserProfile.fromDoc(doc);
-      }
-      _isProfileReady = true;
-      notifyListeners();
-    });
+    _currentProfile = _defaultLocalProfile(
+      uid: uid,
+      phone: auth.currentPhoneNumber ?? '',
+    );
+    notifyListeners();
+    unawaited(
+      _restoreLocalProfile(
+        uid,
+        auth.currentPhoneNumber ?? '',
+      ).then((_) => syncFromBackendIfAvailable()).whenComplete(() {
+        _isProfileReady = true;
+        notifyListeners();
+      }),
+    );
   }
 
   Future<void> upsertBasics({
@@ -101,56 +80,31 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_isLocalAuth(uid)) {
-        final normalizedGender = _normalizeGender(gender);
-        _currentProfile = UserProfile(
-          id: uid,
-          firstName: firstName,
-          lastName: lastName,
-          age: age,
-          gender: normalizedGender,
-          phoneNumber: phoneNumber,
-          bio: _currentProfile?.bio ?? '',
-          interests: _currentProfile?.interests ?? const <String>[],
-          photoUrls: _currentProfile?.photoUrls ?? const <String>[],
-          isOnline: true,
-          isVerified: _currentProfile?.isVerified ?? false,
-          lastSeen: DateTime.now(),
-          preferences:
-              _currentProfile?.preferences ?? const DiscoveryPreferences(),
-          role: _currentProfile?.role ?? 'user',
-        );
-        await _persistLocalProfile(uid);
-        await _syncLocalProfileToBackend(
-          name: '$firstName $lastName'.trim(),
-          gender: normalizedGender,
-          birthDate: birthDate,
-          photos: _currentProfile?.photoUrls ?? const <String>[],
-        );
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
-      await _firestore.collection('users').doc(uid).set({
-        'firstName': firstName,
-        'lastName': lastName,
-        'age': age,
-        'gender': gender,
-        'phoneNumber': phoneNumber,
-        'bio': _currentProfile?.bio ?? '',
-        'interests': _currentProfile?.interests ?? const <String>[],
-        'photoUrls': _currentProfile?.photoUrls ?? const <String>[],
-        'isOnline': true,
-        'isVerified': _currentProfile?.isVerified ?? false,
-        'lastSeen': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'role': _currentProfile?.role ?? 'user',
-        'preferences':
-            (_currentProfile?.preferences ?? const DiscoveryPreferences())
-                .toMap(),
-      }, SetOptions(merge: true));
+      final normalizedGender = _normalizeGender(gender);
+      _currentProfile = UserProfile(
+        id: uid,
+        firstName: firstName,
+        lastName: lastName,
+        age: age,
+        gender: normalizedGender,
+        phoneNumber: phoneNumber,
+        bio: _currentProfile?.bio ?? '',
+        interests: _currentProfile?.interests ?? const <String>[],
+        photoUrls: _currentProfile?.photoUrls ?? const <String>[],
+        isOnline: true,
+        isVerified: _currentProfile?.isVerified ?? false,
+        lastSeen: DateTime.now(),
+        preferences:
+            _currentProfile?.preferences ?? const DiscoveryPreferences(),
+        role: _currentProfile?.role ?? 'user',
+      );
+      await _persistLocalProfile(uid);
+      await _syncLocalProfileToBackend(
+        name: '$firstName $lastName'.trim(),
+        gender: normalizedGender,
+        birthDate: birthDate,
+        photos: _currentProfile?.photoUrls ?? const <String>[],
+      );
     } catch (_) {
       _error = 'Could not save profile basics.';
     }
@@ -172,66 +126,43 @@ class ProfileProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    if (_isLocalAuth(uid)) {
-      try {
-        List<String>? finalPhotoUrls = photoUrls;
-        if (photoUrls != null) {
-          finalPhotoUrls = await _resolvePhotoUrlsForBackend(photoUrls);
-        }
-
-        _currentProfile =
-            (_currentProfile ??
-                    UserProfile(
-                      id: uid,
-                      firstName: '',
-                      lastName: '',
-                      age: 0,
-                      gender: 'Other',
-                      phoneNumber: _auth?.currentPhoneNumber ?? '',
-                      bio: '',
-                      interests: const <String>[],
-                      photoUrls: const <String>[],
-                      isOnline: true,
-                      isVerified: false,
-                      lastSeen: DateTime.now(),
-                      preferences: const DiscoveryPreferences(),
-                    ))
-                .copyWith(
-                  bio: bio,
-                  interests: interests,
-                  photoUrls: finalPhotoUrls,
-                  isVerified: isVerified,
-                  lastSeen: DateTime.now(),
-                );
-        await _persistLocalProfile(uid);
-        final profile = _currentProfile;
-        await _syncLocalProfileToBackend(
-          name: profile?.name,
-          gender: profile?.gender,
-          photos: profile?.photoUrls,
-        );
-      } catch (e) {
-        _error = 'Could not update profile: $e';
-      } finally {
-        _isLoading = false;
-        notifyListeners();
-      }
-      return;
-    }
-
-    final payload = <String, dynamic>{
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    if (bio != null) payload['bio'] = bio;
-    if (interests != null) payload['interests'] = interests;
-    if (photoUrls != null) payload['photoUrls'] = photoUrls;
-    if (isVerified != null) payload['isVerified'] = isVerified;
-
     try {
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .set(payload, SetOptions(merge: true));
+      List<String>? finalPhotoUrls = photoUrls;
+      if (photoUrls != null) {
+        finalPhotoUrls = await _resolvePhotoUrlsForBackend(photoUrls);
+      }
+
+      _currentProfile =
+          (_currentProfile ??
+                  UserProfile(
+                    id: uid,
+                    firstName: '',
+                    lastName: '',
+                    age: 0,
+                    gender: 'Other',
+                    phoneNumber: _auth?.currentPhoneNumber ?? '',
+                    bio: '',
+                    interests: const <String>[],
+                    photoUrls: const <String>[],
+                    isOnline: true,
+                    isVerified: false,
+                    lastSeen: DateTime.now(),
+                    preferences: const DiscoveryPreferences(),
+                  ))
+              .copyWith(
+                bio: bio,
+                interests: interests,
+                photoUrls: finalPhotoUrls,
+                isVerified: isVerified,
+                lastSeen: DateTime.now(),
+              );
+      await _persistLocalProfile(uid);
+      final profile = _currentProfile;
+      await _syncLocalProfileToBackend(
+        name: profile?.name,
+        gender: profile?.gender,
+        photos: profile?.photoUrls,
+      );
     } catch (e) {
       _error = 'Could not update profile: $e';
     } finally {
@@ -254,43 +185,26 @@ class ProfileProvider extends ChangeNotifier {
                 ))
             .copyWith(preferences: preferences, lastSeen: DateTime.now());
 
-    if (_isLocalAuth(uid)) {
-      await _persistLocalProfile(uid);
-      notifyListeners();
-      return;
-    }
-
-    try {
-      await _firestore.collection('users').doc(uid).set({
-        'preferences': preferences.toMap(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      _error = 'Could not save discovery settings: $e';
-    } finally {
-      notifyListeners();
-    }
+    await _persistLocalProfile(uid);
+    final profile = _currentProfile;
+    await _syncLocalProfileToBackend(
+      name: profile?.name,
+      gender: profile?.gender,
+      photos: profile?.photoUrls,
+    );
+    notifyListeners();
   }
 
   Future<void> updateOnlineStatus(bool isOnline) async {
     final uid = _auth?.uid;
     if (uid == null) return;
 
-    if (_isLocalAuth(uid)) {
-      _currentProfile = _currentProfile?.copyWith(
-        isOnline: isOnline,
-        lastSeen: DateTime.now(),
-      );
-      await _persistLocalProfile(uid);
-      notifyListeners();
-      return;
-    }
-
-    await _firestore.collection('users').doc(uid).set({
-      'isOnline': isOnline,
-      'lastSeen': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    _currentProfile = _currentProfile?.copyWith(
+      isOnline: isOnline,
+      lastSeen: DateTime.now(),
+    );
+    await _persistLocalProfile(uid);
+    notifyListeners();
   }
 
   bool get hasCompletedProfile {
@@ -306,7 +220,7 @@ class ProfileProvider extends ChangeNotifier {
     required double longitude,
   }) async {
     final uid = _auth?.uid;
-    if (uid == null || !_isLocalAuth(uid)) return;
+    if (uid == null) return;
 
     _currentProfile =
         (_currentProfile ??
@@ -325,7 +239,7 @@ class ProfileProvider extends ChangeNotifier {
 
   Future<void> syncFromBackendIfAvailable() async {
     final uid = _auth?.uid;
-    if (uid == null || !_isLocalAuth(uid)) return;
+    if (uid == null) return;
 
     final token = await _tryGetBackendToken();
     if (token == null) return;
@@ -471,7 +385,6 @@ class ProfileProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _profileSub?.cancel();
     _profileSyncRetryTimer?.cancel();
     super.dispose();
   }

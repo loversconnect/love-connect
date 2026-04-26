@@ -31,13 +31,13 @@ dependencies:
   http: ^1.2.2
   geolocator: ^13.0.2
   firebase_core: ^4.4.0
-  firebase_auth: ^6.1.1
-  cloud_firestore: ^6.0.3
   firebase_messaging: ^16.0.4
   flutter_local_notifications: ^17.2.4
   image_picker: ^1.1.2
   google_mlkit_face_detection: ^0.13.1
   socket_io_client: ^3.0.2
+  local_auth: ^2.3.0
+  crypto: ^3.0.3
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -61,6 +61,8 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/icons/app_icon.png
 
 flutter_launcher_icons:
   android: true

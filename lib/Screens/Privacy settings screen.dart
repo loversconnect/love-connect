@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/app_feedback.dart';
 import 'package:lerolove/services/backend_api.dart';
@@ -55,7 +56,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       });
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Failed to load privacy settings',
+        message: context.tr('privacy_load_failed'),
         success: false,
       );
     }
@@ -90,13 +91,13 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
       });
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Privacy setting saved',
+        message: context.tr('privacy_saved'),
       );
     } catch (e) {
       if (!mounted) return;
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Failed to save privacy setting',
+        message: context.tr('privacy_save_failed'),
         success: false,
       );
     } finally {
@@ -112,55 +113,47 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Privacy Settings')),
+      appBar: AppBar(title: Text(context.tr('privacy_settings'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colorScheme.outlineVariant),
-                  ),
-                  child: const Text(
-                    'These privacy options are saved on your account and enforced by backend.',
+                Text(
+                  context.tr('privacy_intro'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.72),
+                    height: 1.35,
                   ),
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
                   value: _discoverable,
                   onChanged: _saving ? null : (v) => _save(discoverable: v),
-                  title: const Text('Show my profile in discovery'),
-                  subtitle: const Text(
-                    'If off, other people cannot find you in swipe/discovery.',
-                  ),
+                  title: Text(context.tr('show_profile_discovery')),
+                  subtitle: Text(context.tr('show_profile_discovery_sub')),
                 ),
                 SwitchListTile(
                   value: _showOnlineStatus,
                   onChanged: _saving ? null : (v) => _save(showOnlineStatus: v),
-                  title: const Text('Show online status'),
-                  subtitle: const Text('Allow app to show your active status.'),
+                  title: Text(context.tr('show_online_status')),
+                  subtitle: Text(context.tr('show_online_status_sub')),
                 ),
                 SwitchListTile(
                   value: _showDistanceInDiscovery,
                   onChanged: _saving
                       ? null
                       : (v) => _save(showDistanceInDiscovery: v),
-                  title: const Text('Show distance in discovery'),
-                  subtitle: const Text('Hide your exact distance from others.'),
+                  title: Text(context.tr('show_distance_discovery')),
+                  subtitle: Text(context.tr('show_distance_discovery_sub')),
                 ),
                 SwitchListTile(
                   value: _allowMessagesFromMatchesOnly,
                   onChanged: _saving
                       ? null
                       : (v) => _save(allowMessagesFromMatchesOnly: v),
-                  title: const Text('Messages from matches only'),
-                  subtitle: const Text(
-                    'Block messages from non-matched users.',
-                  ),
+                  title: Text(context.tr('messages_matches_only')),
+                  subtitle: Text(context.tr('messages_matches_only_sub')),
                 ),
               ],
             ),

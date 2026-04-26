@@ -3,6 +3,8 @@ import 'package:lerolove/models/match_models.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/matches_provider.dart';
 import 'package:lerolove/providers/moderation_provider.dart';
+import 'package:lerolove/Utils/app_feedback.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Utils/chat_background_manager.dart';
 import 'package:lerolove/Utils/responsive.dart';
@@ -29,15 +31,11 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  static const List<String> _quickStarters = <String>[
-    'Hey, how is your day going?',
-    'What do you enjoy doing for fun?',
-    'Nice to match with you. How are you?',
-  ];
-
   bool _showSafetyBanner = true;
   bool _isSending = false;
   bool _historyHydrationDone = false;
+  DateTime? _lastAutoRefreshAt;
+  bool? _lastOfflineState;
 
   @override
   void initState() {
@@ -49,6 +47,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _hydrateConversation() async {
+    final now = DateTime.now();
+    if (_lastAutoRefreshAt != null &&
+        now.difference(_lastAutoRefreshAt!).inSeconds < 2) {
+      return;
+    }
+    _lastAutoRefreshAt = now;
     try {
       await context.read<MatchesProvider>().refreshConversation(widget.matchId);
     } catch (_) {
@@ -86,7 +90,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Message failed. Tap retry on the bubble.')),
+        SnackBar(content: Text(context.tr('message_failed_retry'))),
       );
       return;
     } finally {
@@ -116,7 +120,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         return AlertDialog(
           backgroundColor: colorScheme.surface,
           title: Text(
-            'Report ${widget.matchName}',
+            '${context.tr('report')} ${widget.matchName}',
             style: TextStyle(color: colorScheme.onSurface),
           ),
           content: Column(
@@ -124,15 +128,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Why are you reporting this user?',
+                context.tr('why_reporting_user'),
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
               ),
               const SizedBox(height: 16),
-              _buildReportOption('Inappropriate photos'),
-              _buildReportOption('Harassment'),
-              _buildReportOption('Fake profile'),
-              _buildReportOption('Spam'),
-              _buildReportOption('Other'),
+              _buildReportOption(context.tr('inappropriate_photos')),
+              _buildReportOption(context.tr('harassment')),
+              _buildReportOption(context.tr('fake_profile')),
+              _buildReportOption(context.tr('spam')),
+              _buildReportOption(context.tr('other')),
             ],
           ),
           shape: RoundedRectangleBorder(
@@ -141,7 +145,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(context.tr('cancel')),
             ),
           ],
         );
@@ -164,7 +168,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Report submitted: $reason'),
+            content: Text('${context.tr('report_submitted_prefix')}: $reason'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -180,11 +184,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         return AlertDialog(
           backgroundColor: colorScheme.surface,
           title: Text(
-            'Unmatch with ${widget.matchName}?',
+            '${context.tr('unmatch_with')} ${widget.matchName}?',
             style: TextStyle(color: colorScheme.onSurface),
           ),
           content: Text(
-            'This action cannot be undone. Your conversation will be hidden.',
+            context.tr('unmatch_confirm_body'),
             style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
           ),
           shape: RoundedRectangleBorder(
@@ -194,19 +198,31 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
-                'Cancel',
+                context.tr('cancel'),
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8)),
               ),
             ),
             TextButton(
               onPressed: () async {
-                await context.read<MatchesProvider>().unmatch(widget.matchId);
-                if (!context.mounted) return;
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
+                try {
+                  await context.read<MatchesProvider>().unmatch(widget.matchId);
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                } catch (e) {
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(
+                    SnackBar(
+                      content: Text('${context.tr('unmatch_failed')}: $e'),
+                    ),
+                  );
+                }
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Unmatch'),
+              child: Text(context.tr('unmatch')),
             ),
           ],
         );
@@ -221,9 +237,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       name: widget.matchName,
     );
     if (!mounted) return;
-    await context.read<MatchesProvider>().unmatch(widget.matchId);
+    try {
+      await context.read<MatchesProvider>().unmatch(widget.matchId);
+    } catch (_) {}
     if (!mounted) return;
     Navigator.pop(context);
+  }
+
+  Widget _buildSyncingChip() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            context.tr('syncing'),
+            style: TextStyle(
+              color: colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.w700,
+              fontSize: Responsive.font(context, 11),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -238,8 +292,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final auth = context.watch<AuthProvider>();
     final matchesProvider = context.watch<MatchesProvider>();
+    final isOffline = matchesProvider.isOffline;
+
+    if (_lastOfflineState == true && isOffline == false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        AppFeedback.showBottomStatus(
+          context,
+          message: context.tr('reconnected_messages_syncing'),
+          success: true,
+          duration: const Duration(milliseconds: 1100),
+        );
+      });
+    }
+    _lastOfflineState = isOffline;
+
     final myUid = auth.backendUserId ?? auth.uid;
     final thread = matchesProvider.matchById(widget.matchId);
+    final peerId = widget.peerUserId ?? _peerFromThread(thread, myUid);
+    final presence = _presenceState(
+      matchesProvider: matchesProvider,
+      thread: thread,
+      myUid: myUid,
+      peerId: peerId,
+    );
     final hasConversationHint = (thread?.lastMessage ?? '').trim().isNotEmpty;
     final hasLoadedConversation = matchesProvider.hasLoadedConversation(
       widget.matchId,
@@ -267,12 +343,32 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                widget.matchName,
-                style: TextStyle(
-                  fontSize: Responsive.font(context, 16),
-                  color: colorScheme.onSurface,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.matchName,
+                    style: TextStyle(
+                      fontSize: Responsive.font(context, 16),
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    presence.label,
+                    style: TextStyle(
+                      fontSize: Responsive.font(context, 12),
+                      color: presence.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
@@ -293,7 +389,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Report',
+                      context.tr('report'),
                       style: TextStyle(color: colorScheme.onSurface),
                     ),
                   ],
@@ -309,7 +405,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       color: Colors.red,
                     ),
                     const SizedBox(width: 12),
-                    const Text('Block', style: TextStyle(color: Colors.red)),
+                    Text(
+                      context.tr('block'),
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   ],
                 ),
               ),
@@ -323,7 +422,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       color: Colors.red,
                     ),
                     const SizedBox(width: 12),
-                    const Text('Unmatch', style: TextStyle(color: Colors.red)),
+                    Text(
+                      context.tr('unmatch'),
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   ],
                 ),
               ),
@@ -352,7 +454,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ),
           Column(
             children: [
-              if (matchesProvider.isOffline)
+              if (isOffline)
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -365,7 +467,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'You are offline. We will sync when back online.',
+                    context.tr('offline_sync'),
                     style: TextStyle(
                       color: colorScheme.onErrorContainer,
                       fontWeight: FontWeight.w600,
@@ -390,7 +492,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Never share personal info early. Keep conversations on the app.',
+                          context.tr('safety_banner'),
                           style: TextStyle(
                             fontSize: Responsive.font(context, 12),
                             color: Colors.orange[900],
@@ -403,10 +505,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                             _showSafetyBanner = false;
                           });
                         },
-                        child: const Text('Got it'),
+                        child: Text(context.tr('got_it')),
                       ),
                     ],
                   ),
+                ),
+              if (matchesProvider.isSyncing)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildSyncingChip(),
                 ),
               Expanded(
                 child: StreamBuilder<List<ChatMessageModel>>(
@@ -416,6 +523,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   builder: (context, snapshot) {
                     final messages =
                         snapshot.data ?? const <ChatMessageModel>[];
+                    if (messages.isNotEmpty &&
+                        hasLoadedConversation &&
+                        !_historyHydrationDone) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        setState(() {
+                          _historyHydrationDone = true;
+                        });
+                      });
+                    }
                     if (messages.isEmpty &&
                         (!_historyHydrationDone || !hasLoadedConversation)) {
                       return _buildChatSkeleton();
@@ -427,9 +544,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       itemBuilder: (context, index) {
                         if (messages.isEmpty) {
                           if (matchesProvider.isOffline) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              _hydrateConversation();
+                            });
                             return _buildLoadingConversationCard(
-                              label:
-                                  'Offline. Showing saved chat when available...',
+                              label: context.tr('offline_saved_chat'),
                             );
                           }
                           if (!_historyHydrationDone ||
@@ -500,7 +620,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           style: TextStyle(color: colorScheme.onSurface),
                           enabled: !_isSending,
                           decoration: InputDecoration(
-                            hintText: 'Type a message or emoji...',
+                            hintText: context.tr('type_message_or_emoji'),
                             hintStyle: TextStyle(
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),
@@ -623,7 +743,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'You matched with ${widget.matchName}',
+                        '${context.tr('you_matched_with_prefix')} ${widget.matchName}',
                         style: TextStyle(
                           fontSize: Responsive.font(context, 16),
                           fontWeight: FontWeight.w700,
@@ -632,7 +752,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Break the ice with a simple opener.',
+                        context.tr('break_ice'),
                         style: TextStyle(
                           fontSize: Responsive.font(context, 13),
                           color: colorScheme.onSurface.withValues(alpha: 0.68),
@@ -647,7 +767,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _quickStarters
+              children: [
+                context.tr('quick_starter_1'),
+                context.tr('quick_starter_2'),
+                context.tr('quick_starter_3'),
+              ]
                   .map(
                     (text) => ActionChip(
                       label: Text(text),
@@ -771,7 +895,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Sending...',
+                                    context.tr('sending'),
                                     style: TextStyle(
                                       fontSize: Responsive.font(context, 10),
                                       color: colorScheme.onSurface.withOpacity(
@@ -795,9 +919,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                   } catch (_) {
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
+                                      SnackBar(
                                         content: Text(
-                                          'Retry failed. Check connection and try again.',
+                                          context.tr('retry_failed_check_connection'),
                                         ),
                                       ),
                                     );
@@ -813,7 +937,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Retry',
+                                      context.tr('retry'),
                                       style: TextStyle(
                                         fontSize: Responsive.font(context, 10),
                                         color: Colors.redAccent,
@@ -825,7 +949,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                               )
                             : Icon(
                                 key: ValueKey(message.isRead ? 'read' : 'sent'),
-                                Icons.done_all,
+                                message.isRead ? Icons.done_all : Icons.done,
                                 size: Responsive.icon(context, 14),
                                 color: message.isRead
                                     ? colorScheme.primary
@@ -843,9 +967,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildLoadingConversationCard({
-    String label = 'Loading your conversation...',
-  }) {
+  Widget _buildLoadingConversationCard({String? label}) {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Container(
@@ -870,7 +992,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                label,
+                label ?? context.tr('loading_conversation'),
                 style: TextStyle(
                   fontSize: Responsive.font(context, 14),
                   color: colorScheme.onSurface.withValues(alpha: 0.78),
@@ -926,25 +1048,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   String _dateLabel(DateTime? dateTime) {
-    if (dateTime == null) return 'Today';
+    if (dateTime == null) return context.tr('today');
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final date = DateTime(dateTime.year, dateTime.month, dateTime.day);
     final diff = today.difference(date).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
+    if (diff == 0) return context.tr('today');
+    if (diff == 1) return context.tr('yesterday');
     return '${date.day}/${date.month}/${date.year}';
   }
 
   void _showMessageDetails(ChatMessageModel message, bool isSent) {
     final colorScheme = Theme.of(context).colorScheme;
     final status = message.isFailed
-        ? 'Failed'
+        ? context.tr('failed')
         : message.isPending
-        ? 'Sending...'
+        ? context.tr('sending')
         : message.isRead
-        ? 'Read'
-        : 'Delivered';
+        ? context.tr('read')
+        : context.tr('delivered');
 
     showModalBottomSheet<void>(
       context: context,
@@ -956,7 +1078,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isSent ? 'Your message' : '${widget.matchName} message',
+                isSent ? context.tr('your_message') : '${widget.matchName} ${context.tr('message')}',
                 style: TextStyle(
                   fontSize: Responsive.font(context, 16),
                   fontWeight: FontWeight.w700,
@@ -964,14 +1086,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Status: $status',
+                '${context.tr('status')}: $status',
                 style: TextStyle(
                   color: colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Time: ${_formatTime(message.sentAt)}',
+                '${context.tr('time')}: ${_formatTime(message.sentAt)}',
                 style: TextStyle(
                   color: colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
@@ -1015,19 +1137,67 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
+  String? _peerFromThread(MatchThread? thread, String? myUid) {
+    if (thread == null || myUid == null) return null;
+    for (final id in thread.userIds) {
+      if (id != myUid) return id;
+    }
+    return null;
+  }
+
+  _PresenceState _presenceState({
+    required MatchesProvider matchesProvider,
+    required MatchThread? thread,
+    required String? myUid,
+    required String? peerId,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    if (matchesProvider.isPeerTyping(widget.matchId)) {
+      return _PresenceState(context.tr('active_now'), colorScheme.primary);
+    }
+
+    final lastAt = thread?.lastMessageAt;
+    final lastSender = thread?.lastSenderId;
+    if (lastAt != null &&
+        peerId != null &&
+        lastSender == peerId &&
+        DateTime.now().difference(lastAt).inMinutes <= 5) {
+      return _PresenceState(context.tr('online'), Colors.green.shade600);
+    }
+
+    if (lastAt != null &&
+        peerId != null &&
+        lastSender == peerId &&
+        DateTime.now().difference(lastAt).inHours <= 24) {
+      return _PresenceState(context.tr('active_recently'), colorScheme.secondary);
+    }
+
+    return _PresenceState(
+      context.tr('inactive'),
+      colorScheme.onSurface.withValues(alpha: 0.6),
+    );
+  }
+
   String _formatTime(DateTime? timestamp) {
-    if (timestamp == null) return 'Now';
+    if (timestamp == null) return context.tr('now');
     final now = DateTime.now();
     final difference = now.difference(timestamp);
 
     if (difference.inMinutes < 1) {
-      return 'Now';
+      return context.tr('now');
     } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
+      return '${difference.inMinutes}${context.tr('minute_ago_suffix')}';
     } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
+      return '${difference.inHours}${context.tr('hour_ago_suffix')}';
     } else {
       return '${timestamp.day}/${timestamp.month}';
     }
   }
+}
+
+class _PresenceState {
+  const _PresenceState(this.label, this.color);
+
+  final String label;
+  final Color color;
 }

@@ -53,6 +53,8 @@
 	<string>We use your photos so you can upload profile pictures.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>We use your camera to capture a live selfie for profile verification.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to unlock your LoversConnect app securely.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

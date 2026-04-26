@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/Utils/app_feedback.dart';
 import 'package:lerolove/services/message_alert_service.dart';
@@ -19,7 +20,18 @@ class _NotificationsSettingsScreenState
   bool _loading = true;
   bool _saving = false;
   bool _pushEnabled = true;
-  String _ringtoneTitle = 'Default phone ringtone';
+  String _ringtoneTitle = '';
+
+  String _localizeRingtoneTitle(BuildContext context, String? title) {
+    final value = (title ?? '').trim();
+    if (value.isEmpty || value == 'Default phone ringtone') {
+      return context.tr('default_phone_ringtone');
+    }
+    if (value == 'Custom ringtone') {
+      return context.tr('custom_ringtone');
+    }
+    return value;
+  }
 
   @override
   void initState() {
@@ -35,7 +47,7 @@ class _NotificationsSettingsScreenState
       _pushEnabled =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
-      _ringtoneTitle = ringtoneTitle;
+      _ringtoneTitle = _localizeRingtoneTitle(context, ringtoneTitle);
       _loading = false;
     });
   }
@@ -46,17 +58,17 @@ class _NotificationsSettingsScreenState
       final title = await MessageAlertService.getRingtoneTitle();
       if (!mounted) return;
       setState(() {
-        _ringtoneTitle = title;
+        _ringtoneTitle = _localizeRingtoneTitle(context, title);
       });
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Message ringtone saved',
+        message: context.tr('message_ringtone_saved'),
       );
     } catch (e) {
       if (!mounted) return;
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Could not choose ringtone',
+        message: context.tr('choose_ringtone_failed'),
         success: false,
       );
     }
@@ -68,13 +80,13 @@ class _NotificationsSettingsScreenState
       if (!mounted) return;
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Playing ringtone preview',
+        message: context.tr('playing_ringtone_preview'),
       );
     } catch (e) {
       if (!mounted) return;
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Ringtone preview failed',
+        message: context.tr('ringtone_preview_failed'),
         success: false,
       );
     }
@@ -117,13 +129,15 @@ class _NotificationsSettingsScreenState
       });
       await AppFeedback.showBottomStatus(
         context,
-        message: enabled ? 'Notifications enabled' : 'Notifications disabled',
+        message: enabled
+            ? context.tr('notifications_enabled')
+            : context.tr('notifications_disabled'),
       );
     } catch (e) {
       if (!mounted) return;
       await AppFeedback.showBottomStatus(
         context,
-        message: 'Notification update failed',
+        message: context.tr('notification_update_failed'),
         success: false,
       );
     } finally {
@@ -139,7 +153,7 @@ class _NotificationsSettingsScreenState
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+      appBar: AppBar(title: Text(context.tr('notifications'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -152,22 +166,20 @@ class _NotificationsSettingsScreenState
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: colorScheme.outlineVariant),
                   ),
-                  child: const Text(
-                    'Control whether this account receives push notifications for new matches and messages.',
-                  ),
+                  child: Text(context.tr('notifications_intro')),
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
                   value: _pushEnabled,
                   onChanged: _saving ? null : _setPushEnabled,
-                  title: const Text('Push notifications'),
-                  subtitle: const Text('Match and chat alerts'),
+                  title: Text(context.tr('push_notifications')),
+                  subtitle: Text(context.tr('match_chat_alerts')),
                 ),
                 const SizedBox(height: 10),
                 ListTile(
                   enabled: _pushEnabled && !_saving,
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Message ringtone'),
+                  title: Text(context.tr('message_ringtone')),
                   subtitle: Text(_ringtoneTitle),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _chooseRingtone,
@@ -179,7 +191,7 @@ class _NotificationsSettingsScreenState
                           ? _previewRingtone
                           : null,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Preview'),
+                      label: Text(context.tr('preview')),
                     ),
                     const SizedBox(width: 10),
                     OutlinedButton.icon(
@@ -187,7 +199,7 @@ class _NotificationsSettingsScreenState
                           ? MessageAlertService.stopRingtone
                           : null,
                       icon: const Icon(Icons.stop),
-                      label: const Text('Stop'),
+                      label: Text(context.tr('stop')),
                     ),
                   ],
                 ),

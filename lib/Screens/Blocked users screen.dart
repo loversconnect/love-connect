@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/moderation_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +13,7 @@ class BlockedUsersScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Blocked Users'),
+        title: Text(context.tr('blocked_users_title')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -80,7 +81,7 @@ class BlockedUsersScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Blocked ${_friendlyDate(blockedDate)}',
+                  _friendlyDate(context, blockedDate),
                   style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onBackground.withOpacity(0.6),
                   ),
@@ -95,7 +96,7 @@ class BlockedUsersScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             child: Text(
-              'Unblock',
+              context.tr('unblock'),
               style: TextStyle(
                 fontSize: Responsive.font(context, 14),
                 fontWeight: FontWeight.w600,
@@ -112,17 +113,15 @@ class BlockedUsersScreen extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Unblock $name?'),
-          content: const Text(
-            'This user will be able to see your profile again and you may see them in discovery.',
-          ),
+          title: Text('${context.tr('unblock')} $name?'),
+          content: Text(context.tr('unblock_user_confirm_suffix')),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.tr('cancel')),
             ),
             TextButton(
               onPressed: () async {
@@ -131,7 +130,7 @@ class BlockedUsersScreen extends StatelessWidget {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('$name has been unblocked'),
+                    content: Text('$name ${context.tr('user_unblocked_suffix')}'),
                     duration: const Duration(seconds: 2),
                   ),
                 );
@@ -139,7 +138,7 @@ class BlockedUsersScreen extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.primary,
               ),
-              child: const Text('Unblock'),
+              child: Text(context.tr('unblock')),
             ),
           ],
         );
@@ -163,14 +162,14 @@ class BlockedUsersScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'No Blocked Users',
+              context.tr('no_blocked_users'),
               style: textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 12),
             Text(
-              'When you block someone, they\'ll appear here. You can unblock them at any time.',
+              context.tr('blocked_users_empty'),
               textAlign: TextAlign.center,
               style: textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onBackground.withOpacity(0.7),
@@ -183,12 +182,14 @@ class BlockedUsersScreen extends StatelessWidget {
     );
   }
 
-  String _friendlyDate(DateTime? date) {
-    if (date == null) return 'recently';
+  String _friendlyDate(BuildContext context, DateTime? date) {
+    if (date == null) return context.tr('blocked_recently');
     final diff = DateTime.now().difference(date);
-    if (diff.inDays <= 0) return 'today';
-    if (diff.inDays == 1) return 'yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    if (diff.inDays <= 0) return context.tr('blocked_today');
+    if (diff.inDays == 1) return context.tr('blocked_yesterday');
+    if (diff.inDays < 7) {
+      return '${diff.inDays} ${context.tr('blocked_days_ago_suffix')}';
+    }
     return '${date.day}/${date.month}/${date.year}';
   }
 }

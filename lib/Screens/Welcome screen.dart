@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lerolove/Screens/Phone%20entry%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/responsive.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -65,10 +66,14 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
                       Center(
-                        child: Icon(
-                          Icons.favorite_rounded,
-                          size: Responsive.icon(context, 120),
-                          color: colorScheme.primary.withOpacity(0.25),
+                        child: Opacity(
+                          opacity: 0.92,
+                          child: Image.asset(
+                            'assets/icons/app_icon.png',
+                            width: Responsive.icon(context, 140),
+                            height: Responsive.icon(context, 140),
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     ],
@@ -77,7 +82,7 @@ class WelcomeScreen extends StatelessWidget {
                 const SizedBox(height: 48),
                 // Title
                 Text(
-                  'Welcome to\nLoversConnect',
+                  context.tr('welcome_title'),
                   textAlign: TextAlign.center,
                   style: textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w700,
@@ -87,7 +92,7 @@ class WelcomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 // Description
                 Text(
-                  'Connect with people around you.\nFind meaningful relationships.',
+                  context.tr('welcome_subtitle'),
                   textAlign: TextAlign.center,
                   style: textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onBackground.withOpacity(0.7),
@@ -107,12 +112,12 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text('Get Started'),
+                    child: Text(context.tr('get_started')),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'We never post without permission.',
+                  context.tr('permission_reassurance'),
                   style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onBackground.withOpacity(0.6),
                   ),

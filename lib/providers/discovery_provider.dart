@@ -37,6 +37,8 @@ class DiscoveryProvider extends ChangeNotifier {
   bool _isOffline = false;
   final Set<String> _queuedLikeIds = <String>{};
   Timer? _retryTimer;
+  Timer? _recoveryTimer;
+  bool _isRecoveryRunning = false;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -45,6 +47,7 @@ class DiscoveryProvider extends ChangeNotifier {
   DateTime? get lastSyncedAt => _lastSyncedAt;
   bool get isOffline => _isOffline;
   int get queuedActionsCount => _queuedLikeIds.length;
+  bool get isSyncing => _isLoading || _isRecoveryRunning;
 
   String? syncLabel() {
     if (_lastSyncedAt == null) return null;
@@ -68,9 +71,13 @@ class DiscoveryProvider extends ChangeNotifier {
     _verifiedKnownByUserId.clear();
     _queuedLikeIds.clear();
     _allProfiles = const [];
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _stopRecoveryMonitor();
 
     if (auth.uid != null) {
       _loadFromProfile();
+      _startRecoveryMonitor();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(loadProfiles());
       });
@@ -141,6 +148,7 @@ class DiscoveryProvider extends ChangeNotifier {
   Future<void> loadProfiles() async {
     final auth = _auth;
     if (auth == null || auth.uid == null) return;
+    if (_isLoading) return;
 
     _isLoading = true;
     _error = null;
@@ -224,6 +232,7 @@ class DiscoveryProvider extends ChangeNotifier {
       _isOffline = false;
       _lastSyncedAt = DateTime.now();
       await _flushQueuedLikes(token);
+      _stopRecoveryMonitor();
     } catch (e) {
       _backendDistanceKmByUserId.clear();
       _onlineKnownByUserId.clear();
@@ -231,6 +240,7 @@ class DiscoveryProvider extends ChangeNotifier {
       _allProfiles = const [];
       if (_isLikelyOfflineError(e)) {
         _isOffline = true;
+        _startRecoveryMonitor();
       }
       _error = e.toString().contains('Location permission')
           ? 'Enable location permission to discover nearby people.'
@@ -274,7 +284,8 @@ class DiscoveryProvider extends ChangeNotifier {
     required DiscoverSortMode discoverSortModeValue,
   }) async {
     _error = null;
-    interestedIn = interestedInValue;
+    final normalizedInterestedIn = _normalizeInterestedIn(interestedInValue);
+    interestedIn = normalizedInterestedIn;
     ageRange = ageRangeValue;
     maxDistanceKm = maxDistanceKmValue;
     showOnlineOnly = showOnlineOnlyValue;
@@ -284,7 +295,7 @@ class DiscoveryProvider extends ChangeNotifier {
 
     await _profileProvider?.updateDiscoveryPreferences(
       DiscoveryPreferences(
-        interestedIn: interestedInValue,
+        interestedIn: normalizedInterestedIn,
         minAge: ageRangeValue.start.round(),
         maxAge: ageRangeValue.end.round(),
         maxDistanceKm: maxDistanceKmValue,
@@ -297,6 +308,26 @@ class DiscoveryProvider extends ChangeNotifier {
     );
     notifyListeners();
     await loadProfiles();
+  }
+
+  Future<void> setSortMode(DiscoverSortMode mode) async {
+    if (discoverSortMode == mode) return;
+    discoverSortMode = mode;
+    _error = null;
+
+    await _profileProvider?.updateDiscoveryPreferences(
+      DiscoveryPreferences(
+        interestedIn: interestedIn,
+        minAge: ageRange.start.round(),
+        maxAge: ageRange.end.round(),
+        maxDistanceKm: maxDistanceKm,
+        showOnlineOnly: showOnlineOnly,
+        verifiedProfilesOnly: verifiedProfilesOnly,
+        sortMode: mode == DiscoverSortMode.bestMatch ? 'bestMatch' : 'nearby',
+      ),
+    );
+
+    notifyListeners();
   }
 
   Future<SwipeResultDto?> likeProfile(UserProfile profile) async {
@@ -324,6 +355,7 @@ class DiscoveryProvider extends ChangeNotifier {
       if (_isLikelyOfflineError(e)) {
         _queuedLikeIds.add(profile.id);
         _startRetryQueue();
+        _startRecoveryMonitor();
         _isOffline = true;
         _error = 'No internet right now. Like queued and will retry.';
       } else {
@@ -337,6 +369,7 @@ class DiscoveryProvider extends ChangeNotifier {
       if (_isLikelyOfflineError(e)) {
         _queuedLikeIds.add(profile.id);
         _startRetryQueue();
+        _startRecoveryMonitor();
         _isOffline = true;
         _error = 'No internet right now. Like queued and will retry.';
       } else {
@@ -396,6 +429,32 @@ class DiscoveryProvider extends ChangeNotifier {
       if (auth?.backendToken == null || _queuedLikeIds.isEmpty) return;
       unawaited(_retryQueuedLikes());
     });
+  }
+
+  void _startRecoveryMonitor() {
+    if (_recoveryTimer != null) return;
+    _recoveryTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
+      if (_isRecoveryRunning) return;
+      if (!_isOffline && _queuedLikeIds.isEmpty) return;
+      final auth = _auth;
+      if (auth == null || auth.uid == null) return;
+      _isRecoveryRunning = true;
+      notifyListeners();
+      try {
+        await loadProfiles();
+        if (!_isOffline && _queuedLikeIds.isEmpty) {
+          _stopRecoveryMonitor();
+        }
+      } finally {
+        _isRecoveryRunning = false;
+        notifyListeners();
+      }
+    });
+  }
+
+  void _stopRecoveryMonitor() {
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
   }
 
   Future<void> _retryQueuedLikes() async {
@@ -525,26 +584,32 @@ class DiscoveryProvider extends ChangeNotifier {
     }
 
     final myProfile = _profileProvider?.currentProfile;
+    final safeMinAge = math.min(
+      ageRangeValue.start.round(),
+      ageRangeValue.end.round(),
+    );
+    final safeMaxAge = math.max(
+      ageRangeValue.start.round(),
+      ageRangeValue.end.round(),
+    );
+    final normalizedInterestedIn = _normalizeInterestedIn(interestedInValue);
+    final normalizedGender = _normalizeGender(profile.gender);
     final distance = _distanceForFilter(profile, myProfile);
-    if (distance > maxDistanceKmValue) {
-      return false;
-    }
-    if (profile.age < ageRangeValue.start.round() ||
-        profile.age > ageRangeValue.end.round()) {
-      return false;
-    }
-    if (interestedInValue != 'Everyone' &&
-        _normalizeGender(profile.gender) !=
-            _normalizeGender(interestedInValue)) {
-      return false;
-    }
-    final onlineKnown = _onlineKnownByUserId.containsKey(profile.id);
-    if (showOnlineOnlyValue && onlineKnown && !profile.isOnline) return false;
 
-    final verifiedKnown = _verifiedKnownByUserId.containsKey(profile.id);
-    if (verifiedProfilesOnlyValue && verifiedKnown && !profile.isVerified) {
+    // Strict preference behavior: unknown/hidden distance does not pass distance filter.
+    if (!distance.isFinite || distance < 0 || distance > maxDistanceKmValue) {
       return false;
     }
+    if (profile.age < safeMinAge || profile.age > safeMaxAge) {
+      return false;
+    }
+    if (normalizedInterestedIn == 'MALE' ||
+        normalizedInterestedIn == 'FEMALE') {
+      if (normalizedGender != normalizedInterestedIn) return false;
+    }
+
+    if (showOnlineOnlyValue && !profile.isOnline) return false;
+    if (verifiedProfilesOnlyValue && !profile.isVerified) return false;
 
     return true;
   }
@@ -552,8 +617,8 @@ class DiscoveryProvider extends ChangeNotifier {
   double distanceTo(UserProfile other, UserProfile? me) {
     final backendDistance = _backendDistanceKmByUserId[other.id];
     if (backendDistance != null) {
-      if (backendDistance < 0) {
-        return maxDistanceKm * 0.6;
+      if (backendDistance < 0 || !backendDistance.isFinite) {
+        return double.infinity;
       }
       return backendDistance;
     }
@@ -585,8 +650,7 @@ class DiscoveryProvider extends ChangeNotifier {
 
   double _distanceForFilter(UserProfile other, UserProfile? me) {
     final distance = distanceTo(other, me);
-    if (distance.isFinite) return distance;
-    return maxDistanceKm + 1;
+    return distance;
   }
 
   double distanceFromCurrent(UserProfile other) {
@@ -656,6 +720,7 @@ class DiscoveryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _retryTimer?.cancel();
+    _recoveryTimer?.cancel();
     super.dispose();
   }
 }

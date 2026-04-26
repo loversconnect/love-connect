@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/responsive.dart';
 import 'package:lerolove/Utils/photo_image.dart';
+import 'package:lerolove/providers/matches_provider.dart';
+import 'package:lerolove/providers/moderation_provider.dart';
+import 'package:provider/provider.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   final String name;
@@ -9,6 +13,8 @@ class ProfileDetailScreen extends StatefulWidget {
   final String bio;
   final bool isOnline;
   final List<String> photos;
+  final String userId;
+  final String? matchId;
 
   const ProfileDetailScreen({
     Key? key,
@@ -16,6 +22,8 @@ class ProfileDetailScreen extends StatefulWidget {
     required this.age,
     required this.distance,
     required this.bio,
+    required this.userId,
+    this.matchId,
     this.isOnline = false,
     this.photos = const <String>[],
   }) : super(key: key);
@@ -27,6 +35,7 @@ class ProfileDetailScreen extends StatefulWidget {
 class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
   final PageController _pageController = PageController();
   int _currentPhotoIndex = 0;
+  bool _isModerationBusy = false;
   int get _totalPhotos => widget.photos.isEmpty ? 1 : widget.photos.length;
 
   @override
@@ -51,7 +60,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Report ${widget.name}'),
+              title: Text('${context.tr('report')} ${widget.name}'),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -59,23 +68,23 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Why are you reporting this profile?'),
+                  Text(context.tr('why_reporting_profile')),
                   const SizedBox(height: 16),
-                  _buildReportOption('Inappropriate photos', selectedReason, (
+                  _buildReportOption(context.tr('inappropriate_photos'), selectedReason, (
                     value,
                   ) {
                     setState(() => selectedReason = value);
                   }),
-                  _buildReportOption('Harassment', selectedReason, (value) {
+                  _buildReportOption(context.tr('harassment'), selectedReason, (value) {
                     setState(() => selectedReason = value);
                   }),
-                  _buildReportOption('Fake profile', selectedReason, (value) {
+                  _buildReportOption(context.tr('fake_profile'), selectedReason, (value) {
                     setState(() => selectedReason = value);
                   }),
-                  _buildReportOption('Spam', selectedReason, (value) {
+                  _buildReportOption(context.tr('spam'), selectedReason, (value) {
                     setState(() => selectedReason = value);
                   }),
-                  _buildReportOption('Other', selectedReason, (value) {
+                  _buildReportOption(context.tr('other'), selectedReason, (value) {
                     setState(() => selectedReason = value);
                   }),
                 ],
@@ -83,26 +92,59 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text(context.tr('cancel')),
                 ),
                 TextButton(
                   onPressed: selectedReason != null
-                      ? () {
-                          // In real app: Submit report to Firebase
+                      ? () async {
+                          if (_isModerationBusy) return;
+                          setState(() {
+                            _isModerationBusy = true;
+                          });
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Report submitted. User has been blocked.',
+                          try {
+                            await context.read<ModerationProvider>().reportUser(
+                              reportedUserId: widget.userId,
+                              reason: selectedReason!,
+                              matchId: widget.matchId,
+                            );
+                            await context.read<ModerationProvider>().blockUser(
+                              userId: widget.userId,
+                              name: widget.name,
+                            );
+                            if (widget.matchId != null &&
+                                widget.matchId!.isNotEmpty) {
+                              try {
+                                await context.read<MatchesProvider>().unmatch(
+                                  widget.matchId!,
+                                );
+                              } catch (_) {}
+                            }
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  context.tr('report_submitted_and_blocked'),
+                                ),
                               ),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                          Navigator.pop(context); // Return to discovery
+                            );
+                            Navigator.pop(context, false);
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${context.tr('could_not_report_prefix')}: $e')),
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isModerationBusy = false;
+                              });
+                            }
+                          }
                         }
                       : null,
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Submit Report'),
+                  child: Text(context.tr('submit_report')),
                 ),
               ],
             );
@@ -134,32 +176,55 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Block ${widget.name}?'),
-          content: const Text(
-            'You will no longer see this profile and they won\'t be able to see yours.',
-          ),
+          title: Text('${context.tr('block')} ${widget.name}?'),
+          content: Text(context.tr('block_confirm_body')),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.tr('cancel')),
             ),
             TextButton(
-              onPressed: () {
-                // In real app: Add to blocked list in Firebase
+              onPressed: () async {
+                if (_isModerationBusy) return;
+                setState(() {
+                  _isModerationBusy = true;
+                });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${widget.name} has been blocked'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-                Navigator.pop(context); // Return to discovery
+                try {
+                  await context.read<ModerationProvider>().blockUser(
+                    userId: widget.userId,
+                    name: widget.name,
+                  );
+                  if (widget.matchId != null && widget.matchId!.isNotEmpty) {
+                    try {
+                      await context.read<MatchesProvider>().unmatch(
+                        widget.matchId!,
+                      );
+                    } catch (_) {}
+                  }
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${widget.name} ${context.tr('user_blocked_suffix')}')),
+                  );
+                  Navigator.pop(context, false);
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${context.tr('could_not_block_user_prefix')}: $e')),
+                  );
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      _isModerationBusy = false;
+                    });
+                  }
+                }
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Block'),
+              child: Text(context.tr('block')),
             ),
           ],
         );
@@ -246,7 +311,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'Online',
+                              context.tr('online'),
                               style: TextStyle(
                                 fontSize: Responsive.font(context, 12),
                                 color: Colors.white,
@@ -267,7 +332,7 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${widget.distance} km away',
+                          '${widget.distance} ${context.tr('km_away_suffix')}',
                           style: TextStyle(
                             fontSize: Responsive.font(context, 16),
                             color: Colors.white70,
@@ -329,20 +394,20 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
                         PopupMenuItem(
                           value: 'report',
                           child: Row(
-                            children: const [
+                            children: [
                               Icon(Icons.flag, color: Colors.red),
                               SizedBox(width: 12),
-                              Text('Report'),
+                              Text(context.tr('report')),
                             ],
                           ),
                         ),
                         PopupMenuItem(
                           value: 'block',
                           child: Row(
-                            children: const [
+                            children: [
                               Icon(Icons.block, color: Colors.red),
                               SizedBox(width: 12),
-                              Text('Block'),
+                              Text(context.tr('block')),
                             ],
                           ),
                         ),

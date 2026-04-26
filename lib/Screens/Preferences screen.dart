@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:lerolove/Screens/Main%20app%20screen.dart';
+import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/providers/auth_provider.dart';
 import 'package:lerolove/providers/discovery_provider.dart';
 import 'package:lerolove/providers/profile_provider.dart';
@@ -26,9 +27,9 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
   bool _initialized = false;
 
   final List<Map<String, String>> _interestOptions = const [
-    {'label': 'Male', 'value': 'MALE'},
-    {'label': 'Female', 'value': 'FEMALE'},
-    {'label': 'Everyone', 'value': 'Everyone'},
+    {'label': 'male', 'value': 'MALE'},
+    {'label': 'female', 'value': 'FEMALE'},
+    {'label': 'everyone', 'value': 'Everyone'},
   ];
 
   @override
@@ -75,7 +76,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     if (!serviceEnabled) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Turn on location services to continue.')),
+        SnackBar(content: Text(context.tr('location_services_required'))),
       );
       return false;
     }
@@ -88,7 +89,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
         permission == LocationPermission.deniedForever) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permission is required.')),
+        SnackBar(content: Text(context.tr('location_permission_required'))),
       );
       return false;
     }
@@ -107,9 +108,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     if (!ready || token == null || token.isEmpty) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Backend session unavailable. Please try again.'),
-        ),
+        SnackBar(content: Text(context.tr('backend_session_unavailable'))),
       );
       return false;
     }
@@ -124,7 +123,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     } catch (_) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not sync your location yet.')),
+        SnackBar(content: Text(context.tr('location_sync_failed'))),
       );
       return false;
     }
@@ -149,7 +148,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your Preferences'),
+        title: Text(context.tr('your_preferences')),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -165,7 +164,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Set Your Preferences',
+                      context.tr('set_your_preferences'),
                       style: textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         fontSize: Responsive.font(context, 28),
@@ -173,7 +172,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'We will show nearby people with the strongest relation first.',
+                      context.tr('preferences_intro'),
                       style: textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onBackground.withOpacity(0.7),
                         fontSize: Responsive.font(context, 15),
@@ -181,7 +180,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     ),
                     const SizedBox(height: 36),
                     Text(
-                      'I\'m interested in',
+                      context.tr('interested_in'),
                       style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         fontSize: Responsive.font(context, 16),
@@ -191,7 +190,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     Wrap(
                       spacing: 12,
                       children: _interestOptions.map((option) {
-                        final label = option['label']!;
+                        final label = context.tr(option['label']!);
                         final value = option['value']!;
                         final isSelected = _interestedIn == value;
                         return ChoiceChip(
@@ -224,7 +223,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Age range',
+                          context.tr('age_range'),
                           style: textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
@@ -257,13 +256,13 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Maximum distance',
+                          context.tr('max_distance'),
                           style: textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          '${_maxDistance.round()} km',
+                          '${_maxDistance.round()} ${context.tr('km_away_suffix')}',
                           style: textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: colorScheme.primary,
@@ -288,8 +287,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     const SizedBox(height: 12),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Show online only'),
-                      subtitle: const Text('Only people active right now'),
+                      title: Text(context.tr('show_online_only')),
+                      subtitle: Text(context.tr('only_people_active_now')),
                       value: _showOnlineOnly,
                       onChanged: (value) {
                         setState(() {
@@ -299,8 +298,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Verified profiles only'),
-                      subtitle: const Text('Only see verified accounts'),
+                      title: Text(context.tr('verified_only')),
+                      subtitle: Text(context.tr('verified_only_sub')),
                       value: _verifiedProfilesOnly,
                       onChanged: (value) {
                         setState(() {
@@ -310,7 +309,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Sort discovery by',
+                      context.tr('sort_by'),
                       style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -320,7 +319,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       spacing: 12,
                       children: [
                         ChoiceChip(
-                          label: const Text('Nearby first'),
+                          label: Text(context.tr('nearby_first')),
                           selected: _sortMode == DiscoverSortMode.nearby,
                           showCheckmark: true,
                           checkmarkColor: colorScheme.onPrimary,
@@ -339,7 +338,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                           ),
                         ),
                         ChoiceChip(
-                          label: const Text('Best relation'),
+                          label: Text(context.tr('best_relation')),
                           selected: _sortMode == DiscoverSortMode.bestMatch,
                           showCheckmark: true,
                           checkmarkColor: colorScheme.onPrimary,
@@ -379,7 +378,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              '~$estimated people match your nearby preferences',
+                              '~$estimated ${context.tr('estimated_people_match')}',
                               style: textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onBackground.withOpacity(
                                   0.7,
@@ -401,7 +400,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _startMatching,
-                  child: const Text('Start Matching'),
+                  child: Text(context.tr('start_matching')),
                 ),
               ),
             ),
