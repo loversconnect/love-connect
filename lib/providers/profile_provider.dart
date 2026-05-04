@@ -266,6 +266,11 @@ class ProfileProvider extends ChangeNotifier {
                 photoUrls: dto.photos,
                 latitude: dto.lat,
                 longitude: dto.lng,
+                createdAt: dto.createdAt,
+                trialEndDate: dto.trialEndDate,
+                subscriptionActive: dto.subscriptionActive,
+                subscriptionStatus: dto.subscriptionStatus,
+                subscriptionEndDate: dto.subscriptionEndDate,
                 lastSeen: DateTime.now(),
               );
       await _persistLocalProfile(uid);
@@ -319,6 +324,11 @@ class ProfileProvider extends ChangeNotifier {
       'latitude': profile.latitude,
       'longitude': profile.longitude,
       'role': profile.role,
+      'createdAt': profile.createdAt?.toIso8601String(),
+      'trialEndDate': profile.trialEndDate?.toIso8601String(),
+      'subscriptionActive': profile.subscriptionActive,
+      'subscriptionStatus': profile.subscriptionStatus,
+      'subscriptionEndDate': profile.subscriptionEndDate?.toIso8601String(),
       'preferences': profile.preferences.toMap(),
     };
     await prefs.setString(_localProfileKey(uid), jsonEncode(payload));
@@ -353,6 +363,13 @@ class ProfileProvider extends ChangeNotifier {
         latitude: (map['latitude'] as num?)?.toDouble(),
         longitude: (map['longitude'] as num?)?.toDouble(),
         role: (map['role'] as String?) ?? 'user',
+        createdAt: DateTime.tryParse((map['createdAt'] as String?) ?? ''),
+        trialEndDate: DateTime.tryParse((map['trialEndDate'] as String?) ?? ''),
+        subscriptionActive: (map['subscriptionActive'] as bool?) ?? false,
+        subscriptionStatus: map['subscriptionStatus'] as String?,
+        subscriptionEndDate: DateTime.tryParse(
+          (map['subscriptionEndDate'] as String?) ?? '',
+        ),
         preferences: DiscoveryPreferences.fromMap(
           map['preferences'] as Map<String, dynamic>?,
         ),

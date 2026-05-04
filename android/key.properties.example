@@ -1,4 +1,10 @@
 storeFile=../upload-keystore.jks
-storePassword=CHANGE_ME
+storePassword=LoversConnect@2026
 keyAlias=upload
-keyPassword=CHANGE_ME
+keyPassword=LoversConnect@2026
+
+# You can also provide these through environment variables instead of this file:
+# LEROLOVE_UPLOAD_STORE_FILE
+# LEROLOVE_UPLOAD_STORE_PASSWORD
+# LEROLOVE_UPLOAD_KEY_ALIAS
+# LEROLOVE_UPLOAD_KEY_PASSWORD

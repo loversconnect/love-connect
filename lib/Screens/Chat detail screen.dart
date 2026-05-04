@@ -309,6 +309,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     final myUid = auth.backendUserId ?? auth.uid;
     final thread = matchesProvider.matchById(widget.matchId);
+    final canMessage = thread?.conversationReady ?? true;
     final peerId = widget.peerUserId ?? _peerFromThread(thread, myUid);
     final presence = _presenceState(
       matchesProvider: matchesProvider,
@@ -618,9 +619,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         child: TextField(
                           controller: _messageController,
                           style: TextStyle(color: colorScheme.onSurface),
-                          enabled: !_isSending,
+                          enabled: !_isSending && canMessage,
                           decoration: InputDecoration(
-                            hintText: context.tr('type_message_or_emoji'),
+                            hintText: canMessage
+                                ? context.tr('type_message_or_emoji')
+                                : context.tr('intro_waiting_for_match'),
                             hintStyle: TextStyle(
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),
@@ -668,13 +671,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                               }) {
                                 return null;
                               },
-                          onSubmitted: (_) => _sendMessage(),
+                          onSubmitted: (_) {
+                            if (canMessage) {
+                              _sendMessage();
+                            }
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: _isSending
+                          color: (_isSending || !canMessage)
                               ? colorScheme.primary.withValues(alpha: 0.6)
                               : colorScheme.primary,
                           shape: BoxShape.circle,
@@ -685,7 +692,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                             color: Colors.white,
                           ),
                           iconSize: Responsive.icon(context, 20),
-                          onPressed: _isSending ? null : _sendMessage,
+                          onPressed: (_isSending || !canMessage)
+                              ? null
+                              : _sendMessage,
                         ),
                       ),
                     ],
@@ -701,6 +710,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   Widget _buildConversationStarterCard() {
     final colorScheme = Theme.of(context).colorScheme;
+    final thread = context.read<MatchesProvider>().matchById(widget.matchId);
+    final isMatch = thread?.isMatch ?? true;
+    final title = isMatch
+        ? '${context.tr('you_matched_with_prefix')} ${widget.matchName}'
+        : thread?.isIncomingIntro == true
+        ? '${widget.matchName} ${context.tr('liked_you_prefix')}'
+        : '${context.tr('you_liked_prefix')} ${widget.matchName}';
+    final subtitle = isMatch
+        ? context.tr('break_ice')
+        : thread?.isIncomingIntro == true
+        ? context.tr('incoming_intro_hint')
+        : context.tr('outgoing_intro_hint');
     return Center(
       child: Container(
         width: double.infinity,
@@ -743,7 +764,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${context.tr('you_matched_with_prefix')} ${widget.matchName}',
+                        title,
                         style: TextStyle(
                           fontSize: Responsive.font(context, 16),
                           fontWeight: FontWeight.w700,
@@ -752,7 +773,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        context.tr('break_ice'),
+                        subtitle,
                         style: TextStyle(
                           fontSize: Responsive.font(context, 13),
                           color: colorScheme.onSurface.withValues(alpha: 0.68),

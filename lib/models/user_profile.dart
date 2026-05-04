@@ -65,6 +65,11 @@ class UserProfile {
     this.latitude,
     this.longitude,
     this.role = 'user',
+    this.createdAt,
+    this.trialEndDate,
+    this.subscriptionActive = false,
+    this.subscriptionStatus,
+    this.subscriptionEndDate,
   });
 
   final String id;
@@ -83,6 +88,11 @@ class UserProfile {
   final double? longitude;
   final String role;
   final DiscoveryPreferences preferences;
+  final DateTime? createdAt;
+  final DateTime? trialEndDate;
+  final bool subscriptionActive;
+  final String? subscriptionStatus;
+  final DateTime? subscriptionEndDate;
 
   String get name {
     final full = '$firstName $lastName'.trim();
@@ -92,6 +102,16 @@ class UserProfile {
   bool get hasCompletedBasics => firstName.trim().isNotEmpty && age >= 18;
   bool get hasSelfiePhoto => photoUrls.isNotEmpty;
   bool get hasLocationSet => latitude != null && longitude != null;
+  DateTime? get trialEndsAt =>
+      trialEndDate ?? createdAt?.add(const Duration(hours: 24));
+
+  bool get isFreeTrialOver {
+    final end = trialEndsAt;
+    if (end == null) return false;
+    return !DateTime.now().isBefore(end);
+  }
+
+  bool get requiresPayment => isFreeTrialOver && !subscriptionActive;
 
   int get completenessPercentage {
     var score = 0;
@@ -124,6 +144,11 @@ class UserProfile {
       'preferences': preferences.toMap(),
       'location': {'lat': latitude, 'lng': longitude},
       'role': role,
+      'createdAt': createdAt?.toIso8601String(),
+      'trialEndDate': trialEndDate?.toIso8601String(),
+      'subscriptionActive': subscriptionActive,
+      'subscriptionStatus': subscriptionStatus,
+      'subscriptionEndDate': subscriptionEndDate?.toIso8601String(),
     };
   }
 
@@ -143,6 +168,11 @@ class UserProfile {
     double? longitude,
     DiscoveryPreferences? preferences,
     String? role,
+    DateTime? createdAt,
+    DateTime? trialEndDate,
+    bool? subscriptionActive,
+    String? subscriptionStatus,
+    DateTime? subscriptionEndDate,
   }) {
     return UserProfile(
       id: id,
@@ -161,6 +191,11 @@ class UserProfile {
       longitude: longitude ?? this.longitude,
       preferences: preferences ?? this.preferences,
       role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
+      trialEndDate: trialEndDate ?? this.trialEndDate,
+      subscriptionActive: subscriptionActive ?? this.subscriptionActive,
+      subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
     );
   }
 }

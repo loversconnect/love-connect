@@ -303,6 +303,24 @@ class MatchesProvider extends ChangeNotifier {
       );
     });
 
+    socket.on('like.received', (raw) async {
+      if (raw is! Map) return;
+      final map = raw.map((k, v) => MapEntry(k.toString(), v));
+      final chatId = (map['chatId'] ?? '').toString();
+      final otherUserId = (map['otherUserId'] ?? '').toString();
+      if (chatId.isEmpty || otherUserId.isEmpty) return;
+      await registerThread(
+        matchId: chatId,
+        peerUserId: otherUserId,
+        peerName: (map['otherName'] ?? 'Someone').toString(),
+        isMatch: false,
+        likedByMe: false,
+        likedMe: true,
+        conversationReady: true,
+        queuePrompt: false,
+      );
+    });
+
     socket.on('chat.typing', (raw) {
       if (raw is! Map) return;
       final map = raw.map((k, v) => MapEntry(k.toString(), v));
@@ -370,6 +388,11 @@ class MatchesProvider extends ChangeNotifier {
               peerName: 'Match',
             ),
           );
+        }
+      } else if (type == 'like.received') {
+        final chatId = (event['chatId'] ?? '').toString();
+        if (chatId.isNotEmpty) {
+          unawaited(_syncBackendMatches().then((_) => _refreshHistory(chatId)));
         }
       }
     });
@@ -452,6 +475,10 @@ class MatchesProvider extends ChangeNotifier {
           lastSenderId: null,
           unreadCounts: {me: 0},
           isActive: true,
+          isMatch: dto.isMatch,
+          likedByMe: dto.likedByMe,
+          likedMe: dto.likedMe,
+          conversationReady: dto.conversationReady,
           peerName: dto.peerName,
           peerPhotoUrl: dto.peerPhotoUrl,
         );
@@ -462,12 +489,18 @@ class MatchesProvider extends ChangeNotifier {
           copy[index] = existing.copyWith(
             userIds: thread.userIds,
             isActive: true,
+            isMatch: thread.isMatch,
+            likedByMe: thread.likedByMe,
+            likedMe: thread.likedMe,
+            conversationReady: thread.conversationReady,
             peerName: thread.peerName,
             peerPhotoUrl: thread.peerPhotoUrl,
           );
         } else {
           copy.add(thread);
-          _queueMatchPrompt(matchId: dto.matchId);
+          if (dto.isMatch) {
+            _queueMatchPrompt(matchId: dto.matchId);
+          }
         }
         _matchPeerMap[dto.matchId] = dto.peerUserId;
         changed = true;
@@ -553,6 +586,30 @@ class MatchesProvider extends ChangeNotifier {
     String? peerPhotoUrl,
     bool queuePrompt = true,
   }) async {
+    await registerThread(
+      matchId: matchId,
+      peerUserId: peerUserId,
+      peerName: peerName,
+      peerPhotoUrl: peerPhotoUrl,
+      queuePrompt: queuePrompt,
+      isMatch: true,
+      likedByMe: true,
+      likedMe: true,
+      conversationReady: true,
+    );
+  }
+
+  Future<void> registerThread({
+    required String matchId,
+    required String peerUserId,
+    required String peerName,
+    String? peerPhotoUrl,
+    bool queuePrompt = false,
+    required bool isMatch,
+    required bool likedByMe,
+    required bool likedMe,
+    bool conversationReady = true,
+  }) async {
     final me = _auth?.backendUserId;
     if (me == null) return;
 
@@ -565,13 +622,27 @@ class MatchesProvider extends ChangeNotifier {
       lastSenderId: null,
       unreadCounts: {me: 0},
       isActive: true,
+      isMatch: isMatch,
+      likedByMe: likedByMe,
+      likedMe: likedMe,
+      conversationReady: conversationReady,
       peerName: peerName,
       peerPhotoUrl: peerPhotoUrl,
     );
 
     if (existingIndex >= 0) {
       final copy = [..._matches];
-      copy[existingIndex] = thread;
+      final existing = copy[existingIndex];
+      copy[existingIndex] = existing.copyWith(
+        userIds: thread.userIds,
+        isActive: true,
+        isMatch: isMatch || existing.isMatch,
+        likedByMe: likedByMe || existing.likedByMe,
+        likedMe: likedMe || existing.likedMe,
+        conversationReady: conversationReady || existing.conversationReady,
+        peerName: peerName,
+        peerPhotoUrl: peerPhotoUrl ?? existing.peerPhotoUrl,
+      );
       _matches = copy;
     } else {
       _matches = [thread, ..._matches];
@@ -786,24 +857,6 @@ class MatchesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _markLocalMessageDelivered({
-    required String matchId,
-    required String localId,
-  }) {
-    final existing = [
-      ...(_cachedMessages[matchId] ?? const <ChatMessageModel>[]),
-    ];
-    final index = existing.indexWhere((m) => m.id == localId);
-    if (index < 0) return;
-    existing[index] = existing[index].copyWith(
-      isPending: false,
-      isFailed: false,
-    );
-    _cachedMessages[matchId] = existing;
-    _messageStreams[matchId]?.add(existing);
-    notifyListeners();
-  }
-
   void _applyServerConfirmedMessage({
     required String matchId,
     required String localId,
@@ -897,12 +950,12 @@ class MatchesProvider extends ChangeNotifier {
       );
     } catch (e) {
       if (_isBlockedOrPolicyError(e)) {
-        _markLocalMessageDelivered(matchId: matchId, localId: localId);
+        _markLocalMessageFailed(matchId: matchId, localId: localId);
         _queuedMessages.removeWhere((item) => item.localId == localId);
         _queuedLocalIds.remove(localId);
         _retryInFlightLocalIds.remove(localId);
         _isOffline = false;
-        return;
+        rethrow;
       }
       _markLocalMessageFailed(matchId: matchId, localId: localId);
       if (!_queuedLocalIds.contains(localId)) {
@@ -1148,7 +1201,7 @@ class MatchesProvider extends ChangeNotifier {
           if (_isBlockedOrPolicyError(e)) {
             _queuedMessages.removeWhere((m) => m.localId == item.localId);
             _queuedLocalIds.remove(item.localId);
-            _markLocalMessageDelivered(
+            _markLocalMessageFailed(
               matchId: item.matchId,
               localId: item.localId,
             );
@@ -1252,6 +1305,7 @@ class MatchesProvider extends ChangeNotifier {
         text.contains('blocked') ||
         text.contains('only accepts messages from matched users') ||
         text.contains('accepts messages from matched users') ||
+        text.contains('send a like before starting a chat') ||
         text.contains('cannot send message to this user');
   }
 }

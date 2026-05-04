@@ -8,8 +8,11 @@ import 'package:lerolove/Screens/Tabs/Settings%20tab.dart';
 import 'package:lerolove/Utils/app_i18n.dart';
 import 'package:lerolove/Utils/photo_image.dart';
 import 'package:lerolove/models/match_models.dart';
+import 'package:lerolove/models/user_profile.dart';
 import 'package:lerolove/providers/matches_provider.dart';
+import 'package:lerolove/providers/profile_provider.dart';
 import 'package:lerolove/Utils/responsive.dart';
+import 'package:lerolove/Widgets/payment_required_card.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,10 +23,13 @@ class MainAppScreen extends StatefulWidget {
   State<MainAppScreen> createState() => _MainAppScreenState();
 }
 
-class _MainAppScreenState extends State<MainAppScreen> {
+class _MainAppScreenState extends State<MainAppScreen>
+    with WidgetsBindingObserver {
   static const String _tourSeenKey = 'main_tab_onboarding_seen_v1';
   int _currentIndex = 0;
   bool _isShowingMatchPrompt = false;
+  bool _hasLandedOnDashboard = false;
+  Timer? _trialExpiryTimer;
 
   // All tabs are now imported from separate files
   final List<Widget> _tabs = [
@@ -35,9 +41,30 @@ class _MainAppScreenState extends State<MainAppScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _hasLandedOnDashboard = true;
+      });
       unawaited(_runOnboardingTourIfNeeded());
+      unawaited(context.read<ProfileProvider>().syncFromBackendIfAvailable());
     });
+  }
+
+  @override
+  void dispose() {
+    _trialExpiryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(context.read<ProfileProvider>().syncFromBackendIfAvailable());
+      _refreshTrialGate();
+    }
   }
 
   Future<void> _runOnboardingTourIfNeeded() async {
@@ -123,53 +150,90 @@ class _MainAppScreenState extends State<MainAppScreen> {
       });
     }
 
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _tabs),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  icon: Icons.explore,
-                  label: context.tr('discover'),
-                  index: 0,
-                  isDark: isDark,
-                  colorScheme: colorScheme,
-                ),
-                _buildNavItem(
-                  icon: Icons.chat_bubble,
-                  label: context.tr('matches'),
-                  index: 1,
-                  badge: unreadBadge,
-                  isDark: isDark,
-                  colorScheme: colorScheme,
-                ),
-                _buildNavItem(
-                  icon: Icons.settings,
-                  label: context.tr('settings'),
-                  index: 2,
-                  isDark: isDark,
-                  colorScheme: colorScheme,
+    final profile = context.watch<ProfileProvider>().currentProfile;
+    final showPaymentCard =
+        _hasLandedOnDashboard && (profile?.requiresPayment ?? false);
+    _scheduleTrialGate(profile);
+
+    return Stack(
+      children: [
+        Scaffold(
+          body: IndexedStack(index: _currentIndex, children: _tabs),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
                 ),
               ],
             ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(
+                      icon: Icons.explore,
+                      label: context.tr('discover'),
+                      index: 0,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.chat_bubble,
+                      label: context.tr('matches'),
+                      index: 1,
+                      badge: unreadBadge,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    _buildNavItem(
+                      icon: Icons.settings,
+                      label: context.tr('settings'),
+                      index: 2,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+        if (showPaymentCard) const PaymentRequiredCard(),
+      ],
     );
+  }
+
+  void _scheduleTrialGate(UserProfile? profile) {
+    _trialExpiryTimer?.cancel();
+    if (profile == null ||
+        profile.subscriptionActive ||
+        profile.requiresPayment ||
+        profile.trialEndsAt == null) {
+      return;
+    }
+
+    final wait = profile.trialEndsAt!.difference(DateTime.now());
+    if (wait <= Duration.zero) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshTrialGate());
+      return;
+    }
+
+    _trialExpiryTimer = Timer(wait, _refreshTrialGate);
+  }
+
+  void _refreshTrialGate() {
+    if (!mounted) return;
+    unawaited(context.read<ProfileProvider>().syncFromBackendIfAvailable());
+    setState(() {});
   }
 
   Future<void> _showPendingMatchPrompt(MatchPrompt prompt) async {
@@ -235,7 +299,8 @@ class _MainAppScreenState extends State<MainAppScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(false),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(color: colorScheme.primary),
@@ -249,7 +314,8 @@ class _MainAppScreenState extends State<MainAppScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(true),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(true),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(

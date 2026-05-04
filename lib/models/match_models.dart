@@ -7,6 +7,10 @@ class MatchThread {
     required this.lastSenderId,
     required this.unreadCounts,
     required this.isActive,
+    required this.isMatch,
+    required this.likedByMe,
+    required this.likedMe,
+    required this.conversationReady,
     this.peerName,
     this.peerPhotoUrl,
   });
@@ -18,10 +22,17 @@ class MatchThread {
   final String? lastSenderId;
   final Map<String, int> unreadCounts;
   final bool isActive;
+  final bool isMatch;
+  final bool likedByMe;
+  final bool likedMe;
+  final bool conversationReady;
   final String? peerName;
   final String? peerPhotoUrl;
 
   int unreadFor(String userId) => unreadCounts[userId] ?? 0;
+  bool get isIntroThread => !isMatch;
+  bool get isIncomingIntro => likedMe && !likedByMe;
+  bool get isOutgoingIntro => likedByMe && !likedMe;
 
   factory MatchThread.fromJson(Map<String, dynamic> json) {
     return MatchThread(
@@ -39,6 +50,10 @@ class MatchThread {
             (key, value) => MapEntry(key.toString(), (value as num).toInt()),
           ),
       isActive: (json['isActive'] as bool?) ?? true,
+      isMatch: (json['isMatch'] as bool?) ?? true,
+      likedByMe: (json['likedByMe'] as bool?) ?? true,
+      likedMe: (json['likedMe'] as bool?) ?? true,
+      conversationReady: (json['conversationReady'] as bool?) ?? true,
       peerName: json['peerName'] as String?,
       peerPhotoUrl: json['peerPhotoUrl'] as String?,
     );
@@ -53,6 +68,10 @@ class MatchThread {
       'lastSenderId': lastSenderId,
       'unreadCounts': unreadCounts,
       'isActive': isActive,
+      'isMatch': isMatch,
+      'likedByMe': likedByMe,
+      'likedMe': likedMe,
+      'conversationReady': conversationReady,
       'peerName': peerName,
       'peerPhotoUrl': peerPhotoUrl,
     };
@@ -66,6 +85,10 @@ class MatchThread {
     String? lastSenderId,
     Map<String, int>? unreadCounts,
     bool? isActive,
+    bool? isMatch,
+    bool? likedByMe,
+    bool? likedMe,
+    bool? conversationReady,
     String? peerName,
     String? peerPhotoUrl,
   }) {
@@ -77,6 +100,10 @@ class MatchThread {
       lastSenderId: lastSenderId ?? this.lastSenderId,
       unreadCounts: unreadCounts ?? this.unreadCounts,
       isActive: isActive ?? this.isActive,
+      isMatch: isMatch ?? this.isMatch,
+      likedByMe: likedByMe ?? this.likedByMe,
+      likedMe: likedMe ?? this.likedMe,
+      conversationReady: conversationReady ?? this.conversationReady,
       peerName: peerName ?? this.peerName,
       peerPhotoUrl: peerPhotoUrl ?? this.peerPhotoUrl,
     );

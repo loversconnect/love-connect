@@ -152,14 +152,16 @@ class PushService {
   Future<void> _handleForegroundMessageNotification(
     RemoteMessage message,
   ) async {
-    if (!_isChatMessage(message)) return;
-
     final title =
         message.notification?.title ??
-        (message.data['title']?.toString() ?? 'New message');
+        (message.data['title']?.toString() ??
+            (_isChatMessage(message) ? 'New message' : 'New activity'));
     final body =
         message.notification?.body ??
-        (message.data['body']?.toString() ?? 'You received a new message.');
+        (message.data['body']?.toString() ??
+            (_isChatMessage(message)
+                ? 'You received a new message.'
+                : 'Open the app to see the latest update.'));
 
     final customRingtoneUri = await MessageAlertService.getRingtoneUri();
     final useCustomRingtone =
@@ -168,13 +170,18 @@ class PushService {
         customRingtoneUri != null &&
         customRingtoneUri.trim().isNotEmpty;
 
+    final isChat = _isChatMessage(message);
     final androidDetails = AndroidNotificationDetails(
-      _messagesChannelId,
-      'Messages',
-      channelDescription: 'Alerts for new chat messages',
-      importance: Importance.max,
-      priority: Priority.high,
-      category: AndroidNotificationCategory.message,
+      isChat ? _messagesChannelId : _generalChannelId,
+      isChat ? 'Messages' : 'General',
+      channelDescription: isChat
+          ? 'Alerts for new chat messages'
+          : 'General alerts such as likes and matches',
+      importance: isChat ? Importance.max : Importance.high,
+      priority: isChat ? Priority.high : Priority.defaultPriority,
+      category: isChat
+          ? AndroidNotificationCategory.message
+          : AndroidNotificationCategory.social,
       playSound: !useCustomRingtone,
     );
 

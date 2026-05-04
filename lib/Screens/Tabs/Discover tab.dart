@@ -158,6 +158,34 @@ class _DiscoverTabState extends State<DiscoverTab>
           context.read<MatchesProvider>().markMatchPromptShown(matchId);
           _showActionChip(context.tr('saved'));
           _showMessagePrompt(currentProfile, matchId);
+        } else if (result != null &&
+            (result.chatId?.isNotEmpty ?? false) &&
+            result.conversationReady == true) {
+          final threadId = result.chatId!;
+          final peerId = (result.peerUserId?.isNotEmpty ?? false)
+              ? result.peerUserId!
+              : currentProfile.id;
+          final peerName = (result.peerName?.isNotEmpty ?? false)
+              ? result.peerName!
+              : currentProfile.name;
+          final peerPhoto = (result.peerPhotoUrl?.isNotEmpty ?? false)
+              ? result.peerPhotoUrl
+              : (currentProfile.photoUrls.isNotEmpty
+                    ? currentProfile.photoUrls.first
+                    : null);
+
+          context.read<MatchesProvider>().registerThread(
+            matchId: threadId,
+            peerUserId: peerId,
+            peerName: peerName,
+            peerPhotoUrl: peerPhoto,
+            isMatch: false,
+            likedByMe: true,
+            likedMe: false,
+            conversationReady: true,
+          );
+          _showActionChip(context.tr('saved'));
+          _showIntroPrompt(currentProfile, threadId);
         } else {
           final errorText = discovery.error;
           if (errorText != null && errorText.trim().isNotEmpty) {
@@ -173,7 +201,9 @@ class _DiscoverTabState extends State<DiscoverTab>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '${context.tr('like_sent_to_prefix')} ${currentProfile.name}',
+                result?.message?.trim().isNotEmpty == true
+                    ? context.trError(result!.message!)
+                    : '${context.tr('like_sent_to_prefix')} ${currentProfile.name}',
               ),
               duration: const Duration(milliseconds: 1400),
             ),
@@ -338,6 +368,58 @@ class _DiscoverTabState extends State<DiscoverTab>
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showIntroPrompt(UserProfile profile, String threadId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final textTheme = Theme.of(context).textTheme;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            context.tr('intro_ready_title'),
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            '${context.tr('intro_ready_body_prefix')} ${profile.name}. ${context.tr('intro_ready_body_suffix')}',
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface.withValues(alpha: 0.78),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(context.tr('keep_swiping')),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatDetailScreen(
+                      matchName: profile.name,
+                      matchId: threadId,
+                      peerUserId: profile.id,
+                      matchPhotoUrl: profile.photoUrls.isNotEmpty
+                          ? profile.photoUrls.first
+                          : null,
+                    ),
+                  ),
+                );
+              },
+              child: Text(context.tr('send_intro')),
+            ),
+          ],
         );
       },
     );

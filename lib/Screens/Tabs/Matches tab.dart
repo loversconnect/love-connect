@@ -304,6 +304,20 @@ class _MatchesTabState extends State<MatchesTab> {
     final hasUnread = match.unreadFor(uid) > 0;
 
     final name = match.peerName ?? otherUserId;
+    final previewText = match.lastMessage.isNotEmpty
+        ? match.lastMessage
+        : !match.conversationReady
+        ? context.tr('intro_waiting_for_match')
+        : match.isMatch
+        ? context.tr('new_match_start')
+        : match.isIncomingIntro
+        ? context.tr('intro_request_received')
+        : context.tr('intro_request_sent');
+    final actionLabel = match.isMatch
+        ? context.tr('start_chat')
+        : !match.conversationReady
+        ? context.tr('view_like')
+        : context.tr('open_chat');
 
     return Dismissible(
       key: Key(match.id),
@@ -422,9 +436,7 @@ class _MatchesTabState extends State<MatchesTab> {
                       children: [
                         Expanded(
                           child: Text(
-                            match.lastMessage.isEmpty
-                                ? context.tr('new_match_start')
-                                : match.lastMessage,
+                            previewText,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -491,7 +503,7 @@ class _MatchesTabState extends State<MatchesTab> {
                             );
                           },
                           icon: const Icon(Icons.chat_bubble_outline),
-                          label: Text(context.tr('start_chat')),
+                          label: Text(actionLabel),
                         ),
                       ),
                     ],

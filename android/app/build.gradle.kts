@@ -16,9 +16,24 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
 }
 
+fun signingValue(propertyName: String, environmentName: String): String? =
+    keystoreProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingValue("storeFile", "LEROLOVE_UPLOAD_STORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "LEROLOVE_UPLOAD_STORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "LEROLOVE_UPLOAD_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "LEROLOVE_UPLOAD_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { it != null }
+
 android {
-    namespace = "com.example.lerolove"
-    compileSdk = flutter.compileSdkVersion
+    namespace = "com.loversconnectmw.app"
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -32,33 +47,40 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.lerolove"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        applicationId = "com.loversconnectmw.app"
+        minSdk = maxOf(23, flutter.minSdkVersion)
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
             }
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+        }
+    }
+}
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name == "bundleRelease" || it.name == "assembleRelease" }) {
+        check(hasReleaseSigning) {
+            "Release signing is not configured. Copy android/key.properties.example to " +
+                "android/key.properties or set the LEROLOVE_UPLOAD_* environment variables."
         }
     }
 }

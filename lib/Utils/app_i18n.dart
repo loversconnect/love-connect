@@ -90,6 +90,11 @@ class AppI18n {
     'its_a_match': "It's a Match!",
     'keep_swiping': 'Keep Swiping',
     'message_now': 'Message Now',
+    'send_intro': 'Send Intro',
+    'intro_ready_title': 'You liked them',
+    'intro_ready_body_prefix': 'You can send a first message to',
+    'intro_ready_body_suffix':
+        'They can reply whenever they want, or ignore it.',
     'message': 'Message',
     'app_lock_disabled': 'App lock disabled',
     'app_lock_enabled': 'App lock enabled',
@@ -126,6 +131,13 @@ class AppI18n {
     'match': 'Match',
     'new_match_start': 'New match. Start the conversation.',
     'start_chat': 'Start Chat',
+    'open_chat': 'Open Chat',
+    'view_like': 'View Like',
+    'intro_waiting_for_match':
+        'This user replies after a mutual match. Wait for them to like you back.',
+    'intro_request_sent': 'You liked them. Send an intro when you are ready.',
+    'intro_request_received':
+        'They liked you. Reply only if you want to.',
     'sign_in_to_view_matches': 'Sign in to view matches',
     'no_matches_yet': 'No matches yet',
     'keep_swiping_find_match': 'Keep swiping to find your match!',
@@ -152,10 +164,10 @@ class AppI18n {
         'Quick answers for common questions while using LoversConnect.',
     'faq_q1': 'How does matching work?',
     'faq_a1':
-        'A match only happens when both people tap the heart icon on each other. If only one person taps heart, it is just a like, not a match yet.',
+        'When you tap heart, the other person receives your like. If they like you back, it becomes a match. If they do not like back yet, you may still send an intro message unless they only accept messages from matches.',
     'faq_q2': 'When can I start chatting?',
     'faq_a2':
-        'Once both users like each other, both users can get a match pop-up with Message Now and Keep Swiping. If one person is offline, the prompt can still appear after sync when they come back online.',
+        'You can start chatting right after you like someone if their privacy settings allow intro messages. If both people like each other, it becomes a full match for both users. People who receive your like or intro can reply, ignore it, or respond later.',
     'faq_q3': 'Why am I not seeing nearby profiles?',
     'faq_a3':
         'Make sure location is ON, internet is stable, and your discovery filters (age, distance, gender) are not too strict.',
@@ -410,6 +422,12 @@ class AppI18n {
     'type_message_or_emoji': 'Type a message or emoji...',
     'you_matched_with_prefix': 'You matched with',
     'break_ice': 'Break the ice with a simple opener.',
+    'liked_you_prefix': 'liked you',
+    'you_liked_prefix': 'You liked',
+    'incoming_intro_hint':
+        'You can reply if you are interested, or leave it alone.',
+    'outgoing_intro_hint':
+        'Send a first message when you feel like starting the conversation.',
     'quick_starter_1': 'Hey, how is your day going?',
     'quick_starter_2': 'What do you enjoy doing for fun?',
     'quick_starter_3': 'Nice to match with you. How are you?',
@@ -568,6 +586,11 @@ class AppI18n {
     'its_a_match': 'Ndi Match!',
     'keep_swiping': 'Pitirizani Kuswipe',
     'message_now': 'Tumizani Uthenga Tsopano',
+    'send_intro': 'Tumizani Uthenga Woyamba',
+    'intro_ready_title': 'Mwawakonda',
+    'intro_ready_body_prefix': 'Mutha kutumiza uthenga woyamba kwa',
+    'intro_ready_body_suffix':
+        'Iwo angayankhe akafuna, kapena angangosiya.',
     'message': 'Uthenga',
     'app_lock_disabled': 'Kutseka app kwazimitsidwa',
     'app_lock_enabled': 'Kutseka app kwatseguka',
@@ -604,6 +627,14 @@ class AppI18n {
     'match': 'Match',
     'new_match_start': 'Match yatsopano. Yambani kucheza.',
     'start_chat': 'Yambani Chat',
+    'open_chat': 'Tsegulani Chat',
+    'view_like': 'Onani Like',
+    'intro_waiting_for_match':
+        'Munthuyu amalandira mauthenga pokhapokha mutakhala ma match nonse. Dikirani akukondaneninso.',
+    'intro_request_sent':
+        'Mwawakonda. Tumizani uthenga woyamba mukakonzeka.',
+    'intro_request_received':
+        'Akukondani. Yankhani ngati mukufuna.',
     'sign_in_to_view_matches': 'Lowani kuti muone ma match',
     'no_matches_yet': 'Palibe ma match pano',
     'keep_swiping_find_match': 'Pitirizani kuswipe kuti mupeze match!',
@@ -629,10 +660,10 @@ class AppI18n {
     'faq_subtitle': 'Mayankho achangu a mafunso omwe amafunsidwa pa LoversConnect.',
     'faq_q1': 'Kodi match imagwira bwanji?',
     'faq_a1':
-        'Match imachitika pokhapokha anthu awiri adina mtima pa wina ndi mnzake. Ngati mmodzi yekha adina mtima, ndi like yokha.',
+        'Mukadina mtima, munthu winayo amalandira like yanu. Akakukondaninso, zimakhala match. Ngati sanakukondeni panopa, mutha kutumiza uthenga woyamba pokhapokha ngati amalandira mauthenga kuchokera kuma match okha.',
     'faq_q2': 'Ndingayambe kucheza liti?',
     'faq_a2':
-        'Akadina mtima onse awiri, nonse mutha kulandira pop-up ya match yokhala ndi Tumizani Uthenga Tsopano kapena Pitirizani Kuswipe. Ngati mmodzi ali offline, pop-upyo ingabwerebe atabweranso online pambuyo pa sync.',
+        'Mutha kuyamba kucheza mutangokonda munthu ngati zinsinsi zake zikulola ma intro. Anthu awiri akakondana, zimakhala match yeniyeni kwa onse awiri. Munthu wolandira like kapena uthenga woyamba akhoza kuyankha, kungonyalanyaza, kapena kuyankha mtsogolo.',
     'faq_q3': 'Nchifukwa chiyani sindikuona oyandikira?',
     'faq_a3':
         'Onetsetsani kuti location yatseguka, intaneti ilipo, ndipo ma filter anu (msinkhu, mtunda, gender) sali ovuta kwambiri.',
@@ -887,6 +918,12 @@ class AppI18n {
     'type_message_or_emoji': 'Lembani uthenga kapena emoji...',
     'you_matched_with_prefix': 'Mwapeza match ndi',
     'break_ice': 'Yambani macheza ndi mawu osavuta.',
+    'liked_you_prefix': 'wakukondani',
+    'you_liked_prefix': 'Mwakonda',
+    'incoming_intro_hint':
+        'Mutha kuyankha ngati muli ndi chidwi, kapena mungosiya.',
+    'outgoing_intro_hint':
+        'Tumizani uthenga woyamba mukafuna kuyambitsa macheza.',
     'quick_starter_1': 'Hei, tsiku lanu likuyenda bwanji?',
     'quick_starter_2': 'Mumakonda kuchita chiyani mukamasangalala?',
     'quick_starter_3': 'Ndakondwa kukhala match nanu. Muli bwanji?',

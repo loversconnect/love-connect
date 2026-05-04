@@ -87,6 +87,12 @@ class BackendProfileDto {
     required this.photos,
     required this.lat,
     required this.lng,
+    this.createdAt,
+    this.trialEndDate,
+    this.trialActive = false,
+    this.subscriptionActive = false,
+    this.subscriptionStatus,
+    this.subscriptionEndDate,
   });
 
   final String id;
@@ -98,6 +104,26 @@ class BackendProfileDto {
   final List<String> photos;
   final double? lat;
   final double? lng;
+  final DateTime? createdAt;
+  final DateTime? trialEndDate;
+  final bool trialActive;
+  final bool subscriptionActive;
+  final String? subscriptionStatus;
+  final DateTime? subscriptionEndDate;
+}
+
+class PaymentInitiationDto {
+  PaymentInitiationDto({
+    required this.reference,
+    this.timedAccountNumber,
+    this.expiryDate,
+    this.expiryInMinutes,
+  });
+
+  final String reference;
+  final String? timedAccountNumber;
+  final DateTime? expiryDate;
+  final int? expiryInMinutes;
 }
 
 class AuthSessionDto {
@@ -149,6 +175,10 @@ class MatchSummaryDto {
     required this.peerName,
     this.peerPhotoUrl,
     this.matchedAt,
+    this.isMatch = true,
+    this.likedByMe = true,
+    this.likedMe = true,
+    this.conversationReady = true,
   });
 
   final String matchId;
@@ -156,6 +186,10 @@ class MatchSummaryDto {
   final String peerName;
   final String? peerPhotoUrl;
   final DateTime? matchedAt;
+  final bool isMatch;
+  final bool likedByMe;
+  final bool likedMe;
+  final bool conversationReady;
 }
 
 class PrivacySettingsDto {
@@ -410,6 +444,7 @@ class BackendApi {
     _ensureSuccess(response, fallback: 'Failed to load profile');
     final body = _mapFromBody(_decode(response));
     final photosRaw = body['photos'];
+    final subscription = _mapFromBody(body['subscription']);
     return BackendProfileDto(
       id: (body['id'] as String?) ?? '',
       name: (body['name'] as String?) ?? '',
@@ -422,6 +457,34 @@ class BackendApi {
           .toList(growable: false),
       lat: (body['lat'] as num?)?.toDouble(),
       lng: (body['lng'] as num?)?.toDouble(),
+      createdAt: DateTime.tryParse((body['createdAt'] as String?) ?? ''),
+      trialEndDate: DateTime.tryParse((body['trialEndDate'] as String?) ?? ''),
+      trialActive: (body['trialActive'] as bool?) ?? false,
+      subscriptionActive: (body['subscriptionActive'] as bool?) ?? false,
+      subscriptionStatus: subscription['status'] as String?,
+      subscriptionEndDate: DateTime.tryParse(
+        (subscription['endDate'] as String?) ?? '',
+      ),
+    );
+  }
+
+  Future<PaymentInitiationDto> initiatePayment({
+    required String token,
+    required int amount,
+  }) async {
+    final response = await _post(
+      _uri('/api/pay'),
+      headers: _headers(token: token),
+      body: jsonEncode({'amount': amount}),
+    );
+    _ensureSuccess(response, fallback: 'Failed to start payment');
+    final body = _mapFromBody(_decode(response));
+    final data = _mapFromBody(body['data']);
+    return PaymentInitiationDto(
+      reference: (body['reference'] as String?) ?? '',
+      timedAccountNumber: data['timedAccountNumber']?.toString(),
+      expiryDate: DateTime.tryParse((data['expiryDate'] as String?) ?? ''),
+      expiryInMinutes: (data['expiryInMinutes'] as num?)?.toInt(),
     );
   }
 
@@ -790,6 +853,10 @@ class BackendApi {
             peerName: (map['peerName'] as String?) ?? 'Match',
             peerPhotoUrl: map['peerPhotoUrl'] as String?,
             matchedAt: DateTime.tryParse((map['matchedAt'] as String?) ?? ''),
+            isMatch: (map['isMatch'] as bool?) ?? true,
+            likedByMe: (map['likedByMe'] as bool?) ?? true,
+            likedMe: (map['likedMe'] as bool?) ?? true,
+            conversationReady: (map['conversationReady'] as bool?) ?? true,
           );
         })
         .where((e) => e.matchId.isNotEmpty && e.peerUserId.isNotEmpty)
